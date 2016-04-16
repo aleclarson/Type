@@ -2,6 +2,14 @@
   "name": "type",
   "version": "1.0.0",
   "main": "./js/src/Type",
+  "dependencies": {
+    "builder": "aleclarson/builder#1.0.0",
+    "define": "aleclarson/define#1.0.0",
+    "mergeDefaults": "aleclarson/mergeDefaults#1.0.0",
+    "NamedFunction": "aleclarson/NamedFunction#1.0.0",
+    "sync": "aleclarson/sync#1.0.0",
+    "type-utils": "aleclarson/type-utils#1.0.0"
+  },
   "lotus": {
     "plugins": [
       "lotus-coffee"

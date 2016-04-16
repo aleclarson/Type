@@ -2,19 +2,19 @@ var Type;
 
 Type = require("../src/Type");
 
-Type.Builder.allowDuplicateNames();
+require("../src/TypeRegistry").isEnabled = false;
 
 describe("Type", function() {
   it("adds a 'Kind' property to instances", function() {
     var Foo;
     Foo = Type("Foo");
-    Foo = Foo.finalize();
+    Foo = Foo.build();
     return expect(Foo.Maybe).not.toBe(void 0);
   });
   it("adds a 'Maybe' property to instances", function() {
     var Foo;
     Foo = Type("Foo");
-    Foo = Foo.finalize();
+    Foo = Foo.build();
     return expect(Foo.Maybe).not.toBe(void 0);
   });
   return it("supports a function body", function() {

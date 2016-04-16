@@ -6,19 +6,18 @@
   assertType } = require "type-utils"
 
 NamedFunction = require "NamedFunction"
+Builder = require "builder"
 define = require "define"
-
-Builder = require "./Builder"
 
 module.exports =
 Type = NamedFunction "Type", (name, func) ->
 
-  type = Type.Builder name, func
+  self = Type.Builder name, func
 
-  type._typePhases.push (type) ->
+  self._phases.initType.push (type) ->
     Type.augment type
 
-  return type
+  return self
 
 setKind Type, Function
 

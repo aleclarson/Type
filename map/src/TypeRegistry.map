@@ -1,0 +1,10 @@
+{
+  "version": 3,
+  "file": "TypeRegistry.js",
+  "sourceRoot": "../../src",
+  "sources": [
+    "TypeRegistry.coffee"
+  ],
+  "names": [],
+  "mappings": "AACA,IAAA;;AAAE,SAAW,OAAA,CAAQ,YAAR,EAAX;;AAEF,QAAA,GAAW,MAAM,CAAC,MAAP,CAAc,IAAd;;AAEX,MAAM,CAAC,OAAP,GAEE;EAAA,SAAA,EAAW,IAAX;EAEA,QAAA,EAAU,SAAC,IAAD;IACR,IAAA,CAAc,IAAC,CAAA,SAAf;AAAA,aAAA;;IACA,MAAA,CAAO,CAAI,QAAS,CAAA,IAAA,CAApB,EAA2B,gBAAA,GAAiB,IAAjB,GAAsB,mBAAjD;WACA,QAAS,CAAA,IAAA,CAAT,GAAiB;EAHT,CAFV"
+}

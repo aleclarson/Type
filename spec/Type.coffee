@@ -1,7 +1,7 @@
 
 Type = require "../src/Type"
 
-Type.Builder.allowDuplicateNames()
+require("../src/TypeRegistry").isEnabled = no
 
 describe "Type", ->
 
@@ -9,7 +9,7 @@ describe "Type", ->
 
     Foo = Type "Foo"
 
-    Foo = Foo.finalize()
+    Foo = Foo.build()
 
     expect Foo.Maybe
       .not.toBe undefined
@@ -18,7 +18,7 @@ describe "Type", ->
 
     Foo = Type "Foo"
 
-    Foo = Foo.finalize()
+    Foo = Foo.build()
 
     expect Foo.Maybe
       .not.toBe undefined

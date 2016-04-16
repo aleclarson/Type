@@ -1,12 +1,18 @@
-var Builder, NamedFunction, TypeBuilder, assert, assertType, becomeFunction, define, initBaseObject, initTypeCount, instanceID, instanceType, ref, registerTypeName, registeredTypeNames, setKind, setType, trackInstanceType;
+var Builder, NamedFunction, TypeBuilder, TypeRegistry, assert, assertType, becomeFunction, define, initBaseObject, initTypeCount, instanceID, instanceType, mergeDefaults, ref, setKind, setType, sync, trackInstanceType;
 
 ref = require("type-utils"), assert = ref.assert, assertType = ref.assertType, setType = ref.setType, setKind = ref.setKind;
 
 NamedFunction = require("NamedFunction");
 
+mergeDefaults = require("mergeDefaults");
+
+Builder = require("builder");
+
 define = require("define");
 
-Builder = require("./Builder");
+sync = require("sync");
+
+TypeRegistry = require("./TypeRegistry");
 
 module.exports = TypeBuilder = NamedFunction("TypeBuilder", function(name, func) {
   var self;
@@ -17,24 +23,21 @@ module.exports = TypeBuilder = NamedFunction("TypeBuilder", function(name, func)
     enumerable: false
   }, {
     _name: name,
+    _argumentTypes: null,
     _optionTypes: null,
-    _optionDefaults: null
+    _optionDefaults: null,
+    _getCacheID: null,
+    _getExisting: null
   });
   becomeFunction(self, func);
-  self._typePhases.push(initTypeCount);
   self._willCreate = trackInstanceType;
-  self._initPhases.push(initBaseObject);
+  self._phases.initInstance.push(initBaseObject);
+  self._phases.initType.push(initTypeCount);
+  self._phases.initArguments = [];
   return self;
 });
 
 setKind(TypeBuilder, Builder);
-
-define(TypeBuilder, {
-  __allowDuplicateNames: function() {
-    var registerTypeName;
-    return registerTypeName = emptyFunction;
-  }
-});
 
 define(TypeBuilder.prototype, {
   inherits: function(kind) {
@@ -56,6 +59,47 @@ define(TypeBuilder.prototype, {
       return kind.apply(null, args);
     };
   },
+  createArguments: function(createArguments) {
+    assertType(createArguments, Function);
+    this._phases.initArguments.push(createArguments);
+  },
+  argumentTypes: {
+    get: function() {
+      return this._argumentTypes;
+    },
+    set: function(argumentTypes) {
+      var keys, typeList;
+      assert(!this._argumentTypes, "'argumentTypes' is already defined!");
+      assertType(argumentTypes, [Array, Object]);
+      this._argumentTypes = argumentTypes;
+      this._phases.initType.push(function() {
+        return this.argumentTypes = argumentTypes;
+      });
+      if (!isDev) {
+        return;
+      }
+      if (Array.isArray(argumentTypes)) {
+        keys = argumentTypes.map(function(_, index) {
+          return "args[" + index + "]";
+        });
+        typeList = argumentTypes;
+      } else {
+        keys = Object.keys(argumentTypes);
+        typeList = sync.reduce(argumentTypes, [], function(values, value) {
+          values.push(value);
+          return values;
+        });
+      }
+      return this._phases.initArguments.push(function(args) {
+        var i, index, len, type;
+        for (index = i = 0, len = typeList.length; i < len; index = ++i) {
+          type = typeList[index];
+          assertType(args[index], type, keys[index]);
+        }
+        return args;
+      });
+    }
+  },
   optionTypes: {
     get: function() {
       return this._optionTypes;
@@ -64,10 +108,13 @@ define(TypeBuilder.prototype, {
       assert(!this._optionTypes, "'optionTypes' is already defined!");
       assertType(optionTypes, Object);
       this._optionTypes = optionTypes;
-      this._typePhases.push(function() {
+      this._phases.initType.push(function() {
         return this.optionTypes = optionTypes;
       });
-      return this._argPhases.push(function(args) {
+      if (!isDev) {
+        return;
+      }
+      return this._phases.initArguments.push(function(args) {
         if (args[0] === void 0) {
           args[0] = {};
         }
@@ -81,43 +128,102 @@ define(TypeBuilder.prototype, {
     get: function() {
       return this._optionDefaults;
     },
-    set: function(optionTypes) {
+    set: function(optionDefaults) {
       assert(!this._optionDefaults, "'optionDefaults' is already defined!");
       assertType(optionDefaults, Object);
       this._optionDefaults = optionDefaults;
-      this._typePhases.push(function() {
+      this._phases.initType.push(function() {
         return this.optionDefaults = optionDefaults;
       });
-      return this._argPhases.push(function(args) {
+      return this._phases.initArguments.push(function(args) {
         if (args[0] === void 0) {
           args[0] = {};
         }
         assertType(args[0], Object, "options");
-        return mergeDefaults(args[0], optionDefaults);
+        mergeDefaults(args[0], optionDefaults);
+        return args;
       });
     }
   },
+  returnCached: function(getCacheID) {
+    assertType(getCacheID, Function);
+    this._getCacheID = getCacheID;
+    this._phases.initType.push(function(type) {
+      return type.cache = Object.create(null);
+    });
+  },
+  returnExisting: function(getExisting) {
+    assertType(getExisting, Function);
+    this._getExisting = getExisting;
+  },
   construct: function() {
-    return this.finalize().apply(null, arguments);
+    return this.build().apply(null, arguments);
   },
   __createType: function(type) {
-    registerTypeName(this._name);
+    TypeRegistry.register(this._name);
     type = NamedFunction(this._name, type);
     setKind(type, this._kind);
     return type;
+  },
+  __createArgTransformer: function() {
+    var phases;
+    phases = this._phases.initArguments;
+    if (phases.length === 0) {
+      return emptyFunction.thatReturnsArgument;
+    }
+    return function(initialArgs) {
+      var arg, args, i, j, len, len1, phase;
+      args = [];
+      for (i = 0, len = initialArgs.length; i < len; i++) {
+        arg = initialArgs[i];
+        args.push(arg);
+      }
+      for (j = 0, len1 = phases.length; j < len1; j++) {
+        phase = phases[j];
+        args = phase(args);
+        assert(Array.isArray(args), "Must return an Array of arguments!");
+      }
+      return args;
+    };
+  },
+  __createConstructor: function() {
+    var constructor, getCacheId, getExisting;
+    constructor = Builder.prototype.__createConstructor.call(this);
+    getCacheId = this._getCacheID;
+    if (getCacheId) {
+      return function(type, args) {
+        var id, self;
+        id = getCacheId.apply(null, args);
+        if (id !== void 0) {
+          self = type.cache[id];
+          if (self === void 0) {
+            self = constructor(type, args);
+            type.cache[id] = self;
+          }
+        } else {
+          self = constructor(type, args);
+        }
+        return self;
+      };
+    }
+    getExisting = this._getExisting;
+    if (getExisting) {
+      return function(type, args) {
+        var self;
+        self = getExisting.apply(null, args);
+        if (self !== void 0) {
+          return self;
+        }
+        return constructor(type, args);
+      };
+    }
+    return constructor;
   }
 });
 
 instanceType = null;
 
 instanceID = null;
-
-registeredTypeNames = Object.create(null);
-
-registerTypeName = function(name) {
-  assert(!registeredTypeNames[name], "A type named '" + name + "' already exists!");
-  return registeredTypeNames[name] = true;
-};
 
 becomeFunction = function(type, func) {
   if (func === void 0) {
@@ -138,17 +244,14 @@ initTypeCount = function(type) {
 };
 
 trackInstanceType = function(type) {
-  console.log("BEFORE trackInstanceType: " + (instanceType != null ? instanceType.getName() : void 0));
   if (instanceType) {
     return;
   }
   instanceType = type;
-  instanceID = type.count++;
-  return console.log("AFTER trackInstanceType: " + (instanceType != null ? instanceType.getName() : void 0));
+  return instanceID = type.count++;
 };
 
 initBaseObject = function() {
-  console.log("initBaseObject: " + (instanceType != null ? instanceType.getName() : void 0));
   if (!instanceType) {
     return;
   }

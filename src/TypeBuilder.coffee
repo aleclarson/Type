@@ -2,9 +2,12 @@
 { assert, assertType, setType, setKind } = require "type-utils"
 
 NamedFunction = require "NamedFunction"
+mergeDefaults = require "mergeDefaults"
+Builder = require "builder"
 define = require "define"
+sync = require "sync"
 
-Builder = require "./Builder"
+TypeRegistry = require "./TypeRegistry"
 
 module.exports =
 TypeBuilder = NamedFunction "TypeBuilder", (name, func) ->
@@ -17,26 +20,21 @@ TypeBuilder = NamedFunction "TypeBuilder", (name, func) ->
 
   define self, { enumerable: no },
     _name: name
+    _argumentTypes: null
     _optionTypes: null
     _optionDefaults: null
+    _getCacheID: null
+    _getExisting: null
 
   becomeFunction self, func
 
-  self._typePhases.push initTypeCount
-
   self._willCreate = trackInstanceType
-
-  self._initPhases.push initBaseObject
-
+  self._phases.initInstance.push initBaseObject
+  self._phases.initType.push initTypeCount
+  self._phases.initArguments = []
   return self
 
 setKind TypeBuilder, Builder
-
-define TypeBuilder,
-
-  # Convenience method for testing.
-  __allowDuplicateNames: ->
-    registerTypeName = emptyFunction
 
 define TypeBuilder.prototype,
 
@@ -57,6 +55,41 @@ define TypeBuilder.prototype,
     @_createInstance = (args) -> kind.apply null, args
     return
 
+  createArguments: (createArguments) ->
+    assertType createArguments, Function
+    @_phases.initArguments.push createArguments
+    return
+
+  argumentTypes:
+    get: -> @_argumentTypes
+    set: (argumentTypes) ->
+
+      assert not @_argumentTypes, "'argumentTypes' is already defined!"
+
+      assertType argumentTypes, [ Array, Object ]
+
+      @_argumentTypes = argumentTypes
+
+      @_phases.initType.push ->
+        @argumentTypes = argumentTypes
+
+      return unless isDev
+
+      if Array.isArray argumentTypes
+        keys = argumentTypes.map (_, index) -> "args[#{index}]"
+        typeList = argumentTypes
+
+      else
+        keys = Object.keys argumentTypes
+        typeList = sync.reduce argumentTypes, [], (values, value) ->
+          values.push value
+          return values
+
+      @_phases.initArguments.push (args) ->
+        for type, index in typeList
+          assertType args[index], type, keys[index]
+        return args
+
   optionTypes:
     get: -> @_optionTypes
     set: (optionTypes) ->
@@ -67,10 +100,11 @@ define TypeBuilder.prototype,
 
       @_optionTypes = optionTypes
 
-      @_typePhases.push ->
+      @_phases.initType.push ->
         @optionTypes = optionTypes
 
-      @_argPhases.push (args) ->
+      return unless isDev
+      @_phases.initArguments.push (args) ->
         args[0] = {} if args[0] is undefined
         assertType args[0], Object, "options"
         validateTypes args[0], optionTypes
@@ -78,7 +112,7 @@ define TypeBuilder.prototype,
 
   optionDefaults:
     get: -> @_optionDefaults
-    set: (optionTypes) ->
+    set: (optionDefaults) ->
 
       assert not @_optionDefaults, "'optionDefaults' is already defined!"
 
@@ -86,22 +120,75 @@ define TypeBuilder.prototype,
 
       @_optionDefaults = optionDefaults
 
-      @_typePhases.push ->
+      @_phases.initType.push ->
         @optionDefaults = optionDefaults
 
-      @_argPhases.push (args) ->
+      @_phases.initArguments.push (args) ->
         args[0] = {} if args[0] is undefined
         assertType args[0], Object, "options"
-        return mergeDefaults args[0], optionDefaults
+        mergeDefaults args[0], optionDefaults
+        return args
+
+  returnCached: (getCacheID) ->
+    assertType getCacheID, Function
+    @_getCacheID = getCacheID
+    @_phases.initType.push (type) ->
+      type.cache = Object.create null
+    return
+
+  returnExisting: (getExisting) ->
+    assertType getExisting, Function
+    @_getExisting = getExisting
+    return
 
   construct: ->
-    @finalize().apply null, arguments
+    @build().apply null, arguments
 
   __createType: (type) ->
-    registerTypeName @_name
+    TypeRegistry.register @_name
     type = NamedFunction @_name, type
     setKind type, @_kind
     return type
+
+  __createArgTransformer: ->
+
+    phases = @_phases.initArguments
+
+    if phases.length is 0
+      return emptyFunction.thatReturnsArgument
+
+    return (initialArgs) ->
+      args = [] # The 'initialArgs' should not be leaked.
+      args.push arg for arg in initialArgs
+      for phase in phases
+        args = phase args
+        assert (Array.isArray args), "Must return an Array of arguments!"
+      return args
+
+  __createConstructor: ->
+
+    constructor = Builder::__createConstructor.call this
+
+    getCacheId = @_getCacheID
+    if getCacheId
+      return (type, args) ->
+        id = getCacheId.apply null, args
+        if id isnt undefined
+          self = type.cache[id]
+          if self is undefined
+            self = constructor type, args
+            type.cache[id] = self
+        else self = constructor type, args
+        return self
+
+    getExisting = @_getExisting
+    if getExisting
+      return (type, args) ->
+        self = getExisting.apply null, args
+        return self if self isnt undefined
+        return constructor type, args
+
+    return constructor
 
 #
 # Helpers
@@ -110,12 +197,6 @@ define TypeBuilder.prototype,
 # These reflect the instance being built.
 instanceType = null
 instanceID = null
-
-# Prevent types with the same name.
-registeredTypeNames = Object.create null
-registerTypeName = (name) ->
-  assert not registeredTypeNames[name], "A type named '#{name}' already exists!"
-  registeredTypeNames[name] = yes
 
 becomeFunction = (type, func) ->
   return if func is undefined
@@ -128,15 +209,11 @@ initTypeCount = (type) ->
   type.count = 0
 
 trackInstanceType = (type) ->
-  console.log "BEFORE trackInstanceType: " + instanceType?.getName()
   return if instanceType
   instanceType = type
   instanceID = type.count++
-  console.log "AFTER trackInstanceType: " + instanceType?.getName()
 
 initBaseObject = ->
-
-  console.log "initBaseObject: " + instanceType?.getName()
 
   return unless instanceType
 
