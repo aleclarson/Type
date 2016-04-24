@@ -233,6 +233,45 @@ describe "TypeBuilder.prototype", ->
       expect foo.options.bar
         .toBe no
 
+  describe "overrideMethods()", ->
+
+    it "allows the use of 'this.__super()'", ->
+
+      fooSpy = jasmine.createSpy()
+
+      type = TypeBuilder "Foo"
+
+      type.defineMethods
+
+        test: (a, b) ->
+          fooSpy a, b
+
+      Foo = type.build()
+
+      barSpy = jasmine.createSpy()
+
+      type = TypeBuilder "Bar"
+
+      type.inherits Foo
+
+      type.overrideMethods
+
+        test: (a, b) ->
+          barSpy a, b
+          @__super arguments
+
+      Bar = type.build()
+
+      bar = Bar()
+
+      bar.test 1, 2
+
+      expect barSpy.calls.argsFor 0
+        .toEqual [ 1, 2 ]
+
+      expect fooSpy.calls.argsFor 0
+        .toEqual [ 1, 2 ]
+
   describe "returnCached()", ->
 
     it "creates a cache for the type", ->

@@ -196,6 +196,33 @@ describe("TypeBuilder.prototype", function() {
       return expect(foo.options.bar).toBe(false);
     });
   });
+  describe("overrideMethods()", function() {
+    return it("allows the use of 'this.__super()'", function() {
+      var Bar, Foo, bar, barSpy, fooSpy, type;
+      fooSpy = jasmine.createSpy();
+      type = TypeBuilder("Foo");
+      type.defineMethods({
+        test: function(a, b) {
+          return fooSpy(a, b);
+        }
+      });
+      Foo = type.build();
+      barSpy = jasmine.createSpy();
+      type = TypeBuilder("Bar");
+      type.inherits(Foo);
+      type.overrideMethods({
+        test: function(a, b) {
+          barSpy(a, b);
+          return this.__super(arguments);
+        }
+      });
+      Bar = type.build();
+      bar = Bar();
+      bar.test(1, 2);
+      expect(barSpy.calls.argsFor(0)).toEqual([1, 2]);
+      return expect(fooSpy.calls.argsFor(0)).toEqual([1, 2]);
+    });
+  });
   describe("returnCached()", function() {
     it("creates a cache for the type", function() {
       var Foo, type;

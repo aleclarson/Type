@@ -3,11 +3,14 @@
 
 NamedFunction = require "NamedFunction"
 mergeDefaults = require "mergeDefaults"
+Property = require "Property"
+Override = require "override"
 Builder = require "builder"
 define = require "define"
 sync = require "sync"
 
 TypeRegistry = require "./TypeRegistry"
+BaseObject = require "./BaseObject"
 
 module.exports =
 TypeBuilder = NamedFunction "TypeBuilder", (name, func) ->
@@ -16,49 +19,31 @@ TypeBuilder = NamedFunction "TypeBuilder", (name, func) ->
 
   self = Builder()
 
+  self._phases.initArguments = []
+
   setType self, TypeBuilder
 
-  define self, { enumerable: no },
-    _name: name
-    _argumentTypes: null
-    _optionTypes: null
-    _optionDefaults: null
-    _getCacheID: null
-    _getExisting: null
+  TypeBuilder.props.define self, arguments
 
-  becomeFunction self, func
+  BaseObject.call self, func
 
-  self._willCreate = trackInstanceType
-  self._phases.initInstance.push initBaseObject
-  self._phases.initType.push initTypeCount
-  self._phases.initArguments = []
   return self
 
 setKind TypeBuilder, Builder
 
-define TypeBuilder.prototype,
+TypeBuilder.props = Property.Map
 
-  inherits: (kind) ->
+  _name: (name) -> name
 
-    assertType kind, [ Function.Kind, Null ]
+  _argumentTypes: null
 
-    @_kind = kind
+  _optionTypes: null
 
-    if kind is Object
-      @_createInstance = -> {}
-      return
+  _optionDefaults: null
 
-    if kind is null
-      @_createInstance = -> Object.create null
-      return
+  _getCacheID: null
 
-    @_createInstance = (args) -> kind.apply null, args
-    return
-
-  createArguments: (createArguments) ->
-    assertType createArguments, Function
-    @_phases.initArguments.push createArguments
-    return
+  _getExisting: null
 
   argumentTypes:
     get: -> @_argumentTypes
@@ -70,8 +55,8 @@ define TypeBuilder.prototype,
 
       @_argumentTypes = argumentTypes
 
-      @_phases.initType.push ->
-        @argumentTypes = argumentTypes
+      @_phases.initType.push (type) ->
+        type.argumentTypes = argumentTypes
 
       return unless isDev
 
@@ -100,8 +85,8 @@ define TypeBuilder.prototype,
 
       @_optionTypes = optionTypes
 
-      @_phases.initType.push ->
-        @optionTypes = optionTypes
+      @_phases.initType.push (type) ->
+        type.optionTypes = optionTypes
 
       return unless isDev
       @_phases.initArguments.push (args) ->
@@ -120,14 +105,41 @@ define TypeBuilder.prototype,
 
       @_optionDefaults = optionDefaults
 
-      @_phases.initType.push ->
-        @optionDefaults = optionDefaults
+      @_phases.initType.push (type) ->
+        type.optionDefaults = optionDefaults
 
       @_phases.initArguments.push (args) ->
         args[0] = {} if args[0] is undefined
         assertType args[0], Object, "options"
         mergeDefaults args[0], optionDefaults
         return args
+
+define TypeBuilder.prototype,
+
+  construct: ->
+    @build().apply null, arguments
+
+  inherits: (kind) ->
+
+    assertType kind, [ Function.Kind, Null ]
+
+    @_kind = kind
+
+    if kind is Object
+      @_createInstance = -> {}
+      return
+
+    if kind is null
+      @_createInstance = -> Object.create null
+      return
+
+    @_createInstance = (args) -> kind.apply null, args
+    return
+
+  createArguments: (createArguments) ->
+    assertType createArguments, Function
+    @_phases.initArguments.push createArguments
+    return
 
   returnCached: (getCacheID) ->
     assertType getCacheID, Function
@@ -141,8 +153,23 @@ define TypeBuilder.prototype,
     @_getExisting = getExisting
     return
 
-  construct: ->
-    @build().apply null, arguments
+  overrideMethods: (overrides) ->
+
+    assertType overrides, Object
+
+    name = @_name
+    kind = @_kind
+
+    methods = {}
+    for key, func of overrides
+      assertType func, Function, name + "::" + key
+      methods[key] = Override { key, kind, func }
+
+    @_phases.initType.push (type) ->
+      Override.augment type
+      define type.prototype, methods
+
+define TypeBuilder.prototype,
 
   __createType: (type) ->
     TypeRegistry.register @_name
@@ -189,46 +216,3 @@ define TypeBuilder.prototype,
         return constructor type, args
 
     return constructor
-
-#
-# Helpers
-#
-
-# These reflect the instance being built.
-instanceType = null
-instanceID = null
-
-becomeFunction = (type, func) ->
-  return if func is undefined
-  assertType func, Function
-  type._kind = Function
-  type._createInstance = ->
-    self = -> func.apply self, arguments
-
-initTypeCount = (type) ->
-  type.count = 0
-
-trackInstanceType = (type) ->
-  return if instanceType
-  instanceType = type
-  instanceID = type.count++
-
-initBaseObject = ->
-
-  return unless instanceType
-
-  # The base object has its type set to `instanceType`
-  # so we can override methods used in init phases!
-  setType this, instanceType
-
-  define this, "__name",
-    enumerable: no
-    get: -> @constructor.getName() + "_" + @__id
-
-  define this, "__id",
-    enumerable: no
-    frozen: yes
-    value: instanceID
-
-  instanceType = null
-  instanceID = null
