@@ -1,6 +1,8 @@
-var BaseObject, Builder, NamedFunction, Override, Property, TypeBuilder, TypeRegistry, assert, assertType, define, mergeDefaults, ref, setKind, setType, sync;
+var BaseObject, Builder, NamedFunction, Null, Override, Property, TypeBuilder, TypeRegistry, assert, assertType, define, emptyFunction, mergeDefaults, ref, setKind, setType, sync, validateTypes;
 
-ref = require("type-utils"), assert = ref.assert, assertType = ref.assertType, setType = ref.setType, setKind = ref.setKind;
+ref = require("type-utils"), Null = ref.Null, assert = ref.assert, assertType = ref.assertType, validateTypes = ref.validateTypes, setType = ref.setType, setKind = ref.setKind;
+
+emptyFunction = require("emptyFunction");
 
 NamedFunction = require("NamedFunction");
 
@@ -10,7 +12,7 @@ Property = require("Property");
 
 Override = require("override");
 
-Builder = require("builder");
+Builder = require("Builder");
 
 define = require("define");
 
@@ -38,6 +40,7 @@ TypeBuilder.props = Property.Map({
     return name;
   },
   _argumentTypes: null,
+  _argumentDefaults: null,
   _optionTypes: null,
   _optionDefaults: null,
   _getCacheID: null,
@@ -79,6 +82,46 @@ TypeBuilder.props = Property.Map({
       });
     }
   },
+  argumentDefaults: {
+    get: function() {
+      return this._argumentDefaults;
+    },
+    set: function(argumentDefaults) {
+      var argumentNames;
+      assert(!this._argumentDefaults, "'argumentDefaults' is already defined!");
+      assertType(argumentDefaults, [Array, Object]);
+      this._argumentDefaults = argumentDefaults;
+      this._phases.initType.push(function(type) {
+        return type.argumentDefaults = argumentDefaults;
+      });
+      if (Array.isArray(argumentDefaults)) {
+        this._phases.initArguments.unshift(function(args) {
+          var i, index, len, value;
+          for (index = i = 0, len = argumentDefaults.length; i < len; index = ++i) {
+            value = argumentDefaults[index];
+            if (args[index] !== void 0) {
+              continue;
+            }
+            args[index] = value;
+          }
+          return args;
+        });
+        return;
+      }
+      argumentNames = Object.keys(argumentDefaults);
+      this._phases.initArguments.unshift(function(args) {
+        var i, index, len, name;
+        for (index = i = 0, len = argumentNames.length; i < len; index = ++i) {
+          name = argumentNames[index];
+          if (args[index] !== void 0) {
+            continue;
+          }
+          args[index] = argumentDefaults[name];
+        }
+        return args;
+      });
+    }
+  },
   optionTypes: {
     get: function() {
       return this._optionTypes;
@@ -87,20 +130,18 @@ TypeBuilder.props = Property.Map({
       assert(!this._optionTypes, "'optionTypes' is already defined!");
       assertType(optionTypes, Object);
       this._optionTypes = optionTypes;
-      this._phases.initType.push(function(type) {
-        return type.optionTypes = optionTypes;
-      });
-      if (!isDev) {
-        return;
+      if (!this._optionDefaults) {
+        this.createArguments(this.__createOptions);
       }
-      return this._phases.initArguments.push(function(args) {
-        if (args[0] === void 0) {
-          args[0] = {};
-        }
-        assertType(args[0], Object, "options");
-        validateTypes(args[0], optionTypes);
-        return args;
-      });
+      if (isDev) {
+        this._phases.initArguments.push(function(args) {
+          validateTypes(args[0], optionTypes);
+          return args;
+        });
+        return this._phases.initType.push(function(type) {
+          return type.optionTypes = optionTypes;
+        });
+      }
     }
   },
   optionDefaults: {
@@ -111,16 +152,15 @@ TypeBuilder.props = Property.Map({
       assert(!this._optionDefaults, "'optionDefaults' is already defined!");
       assertType(optionDefaults, Object);
       this._optionDefaults = optionDefaults;
-      this._phases.initType.push(function(type) {
-        return type.optionDefaults = optionDefaults;
-      });
-      return this._phases.initArguments.push(function(args) {
-        if (args[0] === void 0) {
-          args[0] = {};
-        }
-        assertType(args[0], Object, "options");
+      if (!this._optionTypes) {
+        this.createArguments(this.__createOptions);
+      }
+      this._phases.initArguments.unshift(function(args) {
         mergeDefaults(args[0], optionDefaults);
         return args;
+      });
+      return this._phases.initType.push(function(type) {
+        return type.optionDefaults = optionDefaults;
       });
     }
   }
@@ -133,12 +173,6 @@ define(TypeBuilder.prototype, {
   inherits: function(kind) {
     assertType(kind, [Function.Kind, Null]);
     this._kind = kind;
-    if (kind === Object) {
-      this._createInstance = function() {
-        return {};
-      };
-      return;
-    }
     if (kind === null) {
       this._createInstance = function() {
         return Object.create(null);
@@ -151,7 +185,9 @@ define(TypeBuilder.prototype, {
   },
   createArguments: function(createArguments) {
     assertType(createArguments, Function);
-    this._phases.initArguments.push(createArguments);
+    this._phases.build.push(function() {
+      return this._phases.initArguments.unshift(createArguments);
+    });
   },
   returnCached: function(getCacheID) {
     assertType(getCacheID, Function);
@@ -187,6 +223,13 @@ define(TypeBuilder.prototype, {
 });
 
 define(TypeBuilder.prototype, {
+  __createOptions: function(args) {
+    if (args[0] === void 0) {
+      args[0] = {};
+    }
+    assertType(args[0], Object, "options");
+    return args;
+  },
   __createType: function(type) {
     TypeRegistry.register(this._name);
     type = NamedFunction(this._name, type);

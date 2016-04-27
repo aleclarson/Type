@@ -6,7 +6,7 @@
   assertType } = require "type-utils"
 
 NamedFunction = require "NamedFunction"
-Builder = require "builder"
+Builder = require "Builder"
 define = require "define"
 
 module.exports =

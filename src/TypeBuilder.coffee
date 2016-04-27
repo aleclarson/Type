@@ -1,11 +1,12 @@
 
-{ assert, assertType, setType, setKind } = require "type-utils"
+{ Null, assert, assertType, validateTypes, setType, setKind } = require "type-utils"
 
+emptyFunction = require "emptyFunction"
 NamedFunction = require "NamedFunction"
 mergeDefaults = require "mergeDefaults"
 Property = require "Property"
 Override = require "override"
-Builder = require "builder"
+Builder = require "Builder"
 define = require "define"
 sync = require "sync"
 
@@ -36,6 +37,8 @@ TypeBuilder.props = Property.Map
   _name: (name) -> name
 
   _argumentTypes: null
+
+  _argumentDefaults: null
 
   _optionTypes: null
 
@@ -75,6 +78,35 @@ TypeBuilder.props = Property.Map
           assertType args[index], type, keys[index]
         return args
 
+  argumentDefaults:
+    get: -> @_argumentDefaults
+    set: (argumentDefaults) ->
+
+      assert not @_argumentDefaults, "'argumentDefaults' is already defined!"
+
+      assertType argumentDefaults, [ Array, Object ]
+
+      @_argumentDefaults = argumentDefaults
+
+      @_phases.initType.push (type) ->
+        type.argumentDefaults = argumentDefaults
+
+      if Array.isArray argumentDefaults
+        @_phases.initArguments.unshift (args) ->
+          for value, index in argumentDefaults
+            continue if args[index] isnt undefined
+            args[index] = value
+          return args
+        return
+
+      argumentNames = Object.keys argumentDefaults
+      @_phases.initArguments.unshift (args) ->
+        for name, index in argumentNames
+          continue if args[index] isnt undefined
+          args[index] = argumentDefaults[name]
+        return args
+      return
+
   optionTypes:
     get: -> @_optionTypes
     set: (optionTypes) ->
@@ -85,15 +117,17 @@ TypeBuilder.props = Property.Map
 
       @_optionTypes = optionTypes
 
-      @_phases.initType.push (type) ->
-        type.optionTypes = optionTypes
+      unless @_optionDefaults
+        @createArguments @__createOptions
 
-      return unless isDev
-      @_phases.initArguments.push (args) ->
-        args[0] = {} if args[0] is undefined
-        assertType args[0], Object, "options"
-        validateTypes args[0], optionTypes
-        return args
+      if isDev
+
+        @_phases.initArguments.push (args) ->
+          validateTypes args[0], optionTypes
+          return args
+
+        @_phases.initType.push (type) ->
+          type.optionTypes = optionTypes
 
   optionDefaults:
     get: -> @_optionDefaults
@@ -105,14 +139,15 @@ TypeBuilder.props = Property.Map
 
       @_optionDefaults = optionDefaults
 
-      @_phases.initType.push (type) ->
-        type.optionDefaults = optionDefaults
+      unless @_optionTypes
+        @createArguments @__createOptions
 
-      @_phases.initArguments.push (args) ->
-        args[0] = {} if args[0] is undefined
-        assertType args[0], Object, "options"
+      @_phases.initArguments.unshift (args) ->
         mergeDefaults args[0], optionDefaults
         return args
+
+      @_phases.initType.push (type) ->
+        type.optionDefaults = optionDefaults
 
 define TypeBuilder.prototype,
 
@@ -125,10 +160,6 @@ define TypeBuilder.prototype,
 
     @_kind = kind
 
-    if kind is Object
-      @_createInstance = -> {}
-      return
-
     if kind is null
       @_createInstance = -> Object.create null
       return
@@ -138,7 +169,8 @@ define TypeBuilder.prototype,
 
   createArguments: (createArguments) ->
     assertType createArguments, Function
-    @_phases.initArguments.push createArguments
+    @_phases.build.push ->
+      @_phases.initArguments.unshift createArguments
     return
 
   returnCached: (getCacheID) ->
@@ -170,6 +202,11 @@ define TypeBuilder.prototype,
       define type.prototype, methods
 
 define TypeBuilder.prototype,
+
+  __createOptions: (args) ->
+    args[0] = {} if args[0] is undefined
+    assertType args[0], Object, "options"
+    return args
 
   __createType: (type) ->
     TypeRegistry.register @_name

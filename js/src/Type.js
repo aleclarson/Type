@@ -4,7 +4,7 @@ ref = require("type-utils"), Kind = ref.Kind, Maybe = ref.Maybe, setType = ref.s
 
 NamedFunction = require("NamedFunction");
 
-Builder = require("builder");
+Builder = require("Builder");
 
 define = require("define");
 
