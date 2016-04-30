@@ -58,7 +58,7 @@ TypeBuilder.props = Property.Map
 
       @_argumentTypes = argumentTypes
 
-      @_phases.initType.push (type) ->
+      @didBuild (type) ->
         type.argumentTypes = argumentTypes
 
       return unless isDev
@@ -73,7 +73,7 @@ TypeBuilder.props = Property.Map
           values.push value
           return values
 
-      @_phases.initArguments.push (args) ->
+      @initArguments (args) ->
         for type, index in typeList
           assertType args[index], type, keys[index]
         return args
@@ -88,11 +88,11 @@ TypeBuilder.props = Property.Map
 
       @_argumentDefaults = argumentDefaults
 
-      @_phases.initType.push (type) ->
+      @didBuild (type) ->
         type.argumentDefaults = argumentDefaults
 
       if Array.isArray argumentDefaults
-        @_phases.initArguments.unshift (args) ->
+        @createArguments (args) ->
           for value, index in argumentDefaults
             continue if args[index] isnt undefined
             args[index] = value
@@ -100,7 +100,7 @@ TypeBuilder.props = Property.Map
         return
 
       argumentNames = Object.keys argumentDefaults
-      @_phases.initArguments.unshift (args) ->
+      @createArguments (args) ->
         for name, index in argumentNames
           continue if args[index] isnt undefined
           args[index] = argumentDefaults[name]
@@ -120,14 +120,14 @@ TypeBuilder.props = Property.Map
       unless @_optionDefaults
         @createArguments @__createOptions
 
-      if isDev
+      return unless isDev
 
-        @_phases.initArguments.push (args) ->
-          validateTypes args[0], optionTypes
-          return args
+      @initArguments (args) ->
+        validateTypes args[0], optionTypes
+        return args
 
-        @_phases.initType.push (type) ->
-          type.optionTypes = optionTypes
+      @didBuild (type) ->
+        type.optionTypes = optionTypes
 
   optionDefaults:
     get: -> @_optionDefaults
@@ -139,15 +139,15 @@ TypeBuilder.props = Property.Map
 
       @_optionDefaults = optionDefaults
 
-      unless @_optionTypes
-        @createArguments @__createOptions
+      @didBuild (type) ->
+        type.optionDefaults = optionDefaults
 
-      @_phases.initArguments.unshift (args) ->
+      @createArguments (args) ->
         mergeDefaults args[0], optionDefaults
         return args
 
-      @_phases.initType.push (type) ->
-        type.optionDefaults = optionDefaults
+      unless @_optionTypes
+        @createArguments @__createOptions
 
 define TypeBuilder.prototype,
 
@@ -167,22 +167,26 @@ define TypeBuilder.prototype,
     @_createInstance = (args) -> kind.apply null, args
     return
 
-  createArguments: (createArguments) ->
-    assertType createArguments, Function
-    @_phases.build.push ->
-      @_phases.initArguments.unshift createArguments
+  createArguments: (fn) ->
+    assertType fn, Function
+    @_phases.initArguments.unshift fn
     return
 
-  returnCached: (getCacheID) ->
-    assertType getCacheID, Function
-    @_getCacheID = getCacheID
-    @_phases.initType.push (type) ->
+  initArguments: (fn) ->
+    assertType fn, Function
+    @_phases.initArguments.push fn
+    return
+
+  returnCached: (fn) ->
+    assertType fn, Function
+    @_getCacheID = fn
+    @didBuild (type) ->
       type.cache = Object.create null
     return
 
-  returnExisting: (getExisting) ->
-    assertType getExisting, Function
-    @_getExisting = getExisting
+  returnExisting: (fn) ->
+    assertType fn, Function
+    @_getExisting = fn
     return
 
   overrideMethods: (overrides) ->
@@ -197,7 +201,7 @@ define TypeBuilder.prototype,
       assertType func, Function, name + "::" + key
       methods[key] = Override { key, kind, func }
 
-    @_phases.initType.push (type) ->
+    @didBuild (type) ->
       Override.augment type
       define type.prototype, methods
 

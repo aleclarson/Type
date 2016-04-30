@@ -206,7 +206,7 @@ describe "TypeBuilder.prototype", ->
 
       type.optionDefaults = { foo: 1 }
 
-      type.init (options) ->
+      type.initInstance (options) ->
 
         expect options
           .not.toBe undefined
@@ -222,7 +222,7 @@ describe "TypeBuilder.prototype", ->
 
       type.optionDefaults = { foo: 1, bar: yes }
 
-      type.init (options) ->
+      type.initInstance (options) ->
         @options = options
 
       foo = type.construct { bar: no }

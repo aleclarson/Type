@@ -14,7 +14,7 @@ Type = NamedFunction "Type", (name, func) ->
 
   self = Type.Builder name, func
 
-  self._phases.initType.push (type) ->
+  self.didBuild (type) ->
     Type.augment type
 
   return self

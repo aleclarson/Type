@@ -3,6 +3,16 @@
 
 Property = require "Property"
 
+module.exports = (func) ->
+
+  mixin.becomeFunction this, func
+
+  @willCreate mixin.willCreate
+
+  @didCreate mixin.didCreate
+
+  @didBuild mixin.didBuild
+
 # These reflect the instance being built.
 instanceType = null
 instanceID = null
@@ -18,38 +28,34 @@ props =
     frozen: yes
     enumerable: no
 
-module.exports = (func) ->
-  becomeFunction this, func
-  @_willCreate = willCreate
-  @_didCreate = didCreate
-  @_phases.initType.push initType
+mixin =
 
-initType = (type) ->
-  type.count = 0
+  didBuild: (type) ->
+    type.count = 0
 
-willCreate = (type) ->
-  return if instanceType
-  instanceType = type
-  instanceID = type.count++
+  willCreate: (type) ->
+    return if instanceType
+    instanceType = type
+    instanceID = type.count++
 
-didCreate = ->
+  didCreate: ->
 
-  return unless instanceType
+    return unless instanceType
 
-  # The base object has its type set to `instanceType`
-  # so we can override methods used in init phases!
-  setType this, instanceType
+    # The base object has its type set to `instanceType`
+    # so we can override methods used in init phases!
+    setType this, instanceType
 
-  props.name.define this, "__name"
-  props.id.define this, "__id", instanceID
+    props.name.define this, "__name"
+    props.id.define this, "__id", instanceID
 
-  instanceType = null
-  instanceID = null
-  return
+    instanceType = null
+    instanceID = null
+    return
 
-becomeFunction = (type, func) ->
-  return if func is undefined
-  assertType func, Function
-  type._kind = Function
-  type._createInstance = ->
-    self = -> func.apply self, arguments
+  becomeFunction: (type, func) ->
+    return if func is undefined
+    assertType func, Function
+    type._kind = Function
+    type._createInstance = ->
+      self = -> func.apply self, arguments
