@@ -65,13 +65,6 @@ describe "TypeBuilder.prototype", ->
       expect getKind Foo
         .toBe null
 
-    it "defaults to Object if not called", ->
-
-      type = TypeBuilder "Foo"
-
-      expect type._kind
-        .toBe Object
-
   describe "createArguments()", ->
 
     it "is passed an Array of arguments", ->
@@ -103,20 +96,47 @@ describe "TypeBuilder.prototype", ->
       expect -> type.construct()
         .toThrowError "Must return an Array of arguments!"
 
-    it "can be called multiple times (useful for mixins)", ->
+    it "calls each 'createArguments' function in order of most recently added", ->
+
+      type = TypeBuilder "Foo"
+
+      type.initInstance (foo) ->
+        expect foo
+          .toBe 1
+
+      type.createArguments -> [ 1 ]
+
+      type.createArguments -> [ 2 ]
+
+      type.construct()
+
+  describe "initArguments()", ->
+
+    it "calls your function after any 'createArguments' functions", ->
 
       type = TypeBuilder "Foo"
 
       type.createArguments -> [ 1 ]
 
-      type.createArguments (args) ->
-
+      type.initArguments (args) ->
         expect args[0]
           .toBe 1
 
-        return args
+      type.createArguments -> [ 2 ]
 
-      type.construct 2
+      type.construct 0
+
+    it "cannot overwrite the arguments array like 'createArguments' can", ->
+
+      type = TypeBuilder "Foo"
+
+      type.initArguments -> [ 1 ]
+
+      type.initInstance (foo) ->
+        expect foo
+          .toBe 0
+
+      type.construct 0
 
   describe "argumentTypes { get, set }", ->
 
@@ -160,6 +180,48 @@ describe "TypeBuilder.prototype", ->
 
       expect -> type.construct 1, yes
         .not.toThrow()
+
+  describe "argumentDefaults { get, set }", ->
+
+    it "is merged into the arguments, overwriting any undefined values", ->
+
+      type = TypeBuilder "Foo"
+
+      type.argumentTypes = [ Number, Number, Number ]
+
+      type.argumentDefaults = [ 1, 2, 3 ]
+
+      type.initInstance (a, b, c) ->
+        expect [ a, b, c ]
+          .toEqual [ 2, 2, 2 ]
+
+      type.construct 2, undefined, 2
+
+    it "requires 'argumentTypes' to be defined first", ->
+
+      type = TypeBuilder "Foo"
+
+      expect -> type.argumentDefaults = {}
+
+    it "can be an array instead", ->
+
+      type = TypeBuilder "Foo"
+
+      type.argumentTypes = { foo: Number.Maybe, bar: Number }
+
+      type.argumentDefaults = [ undefined, 0 ]
+
+      type.initInstance (foo, bar) ->
+
+        expect foo
+          .toBe undefined
+
+        expect bar
+          .toBe 0
+
+      Foo = type.build()
+
+      Foo()
 
   describe "optionTypes { get, set }", ->
 

@@ -11,7 +11,7 @@ define = require("define");
 module.exports = Type = NamedFunction("Type", function(name, func) {
   var self;
   self = Type.Builder(name, func);
-  self._phases.initType.push(function(type) {
+  self.didBuild(function(type) {
     return Type.augment(type);
   });
   return self;

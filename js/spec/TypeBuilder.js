@@ -37,17 +37,12 @@ describe("TypeBuilder.prototype", function() {
       Foo = type.build();
       return expect(getKind(Foo)).toBe(Function);
     });
-    it("can equal null", function() {
+    return it("can equal null", function() {
       var Foo, type;
       type = TypeBuilder("Foo");
       type.inherits(null);
       Foo = type.build();
       return expect(getKind(Foo)).toBe(null);
-    });
-    return it("defaults to Object if not called", function() {
-      var type;
-      type = TypeBuilder("Foo");
-      return expect(type._kind).toBe(Object);
     });
   });
   describe("createArguments()", function() {
@@ -72,17 +67,46 @@ describe("TypeBuilder.prototype", function() {
         return type.construct();
       }).toThrowError("Must return an Array of arguments!");
     });
-    return it("can be called multiple times (useful for mixins)", function() {
+    return it("calls each 'createArguments' function in order of most recently added", function() {
+      var type;
+      type = TypeBuilder("Foo");
+      type.initInstance(function(foo) {
+        return expect(foo).toBe(1);
+      });
+      type.createArguments(function() {
+        return [1];
+      });
+      type.createArguments(function() {
+        return [2];
+      });
+      return type.construct();
+    });
+  });
+  describe("initArguments()", function() {
+    it("calls your function after any 'createArguments' functions", function() {
       var type;
       type = TypeBuilder("Foo");
       type.createArguments(function() {
         return [1];
       });
-      type.createArguments(function(args) {
-        expect(args[0]).toBe(1);
-        return args;
+      type.initArguments(function(args) {
+        return expect(args[0]).toBe(1);
       });
-      return type.construct(2);
+      type.createArguments(function() {
+        return [2];
+      });
+      return type.construct(0);
+    });
+    return it("cannot overwrite the arguments array like 'createArguments' can", function() {
+      var type;
+      type = TypeBuilder("Foo");
+      type.initArguments(function() {
+        return [1];
+      });
+      type.initInstance(function(foo) {
+        return expect(foo).toBe(0);
+      });
+      return type.construct(0);
     });
   });
   describe("argumentTypes { get, set }", function() {
@@ -124,6 +148,40 @@ describe("TypeBuilder.prototype", function() {
       return expect(function() {
         return type.construct(1, true);
       }).not.toThrow();
+    });
+  });
+  describe("argumentDefaults { get, set }", function() {
+    it("is merged into the arguments, overwriting any undefined values", function() {
+      var type;
+      type = TypeBuilder("Foo");
+      type.argumentTypes = [Number, Number, Number];
+      type.argumentDefaults = [1, 2, 3];
+      type.initInstance(function(a, b, c) {
+        return expect([a, b, c]).toEqual([2, 2, 2]);
+      });
+      return type.construct(2, void 0, 2);
+    });
+    it("requires 'argumentTypes' to be defined first", function() {
+      var type;
+      type = TypeBuilder("Foo");
+      return expect(function() {
+        return type.argumentDefaults = {};
+      });
+    });
+    return it("can be an array instead", function() {
+      var Foo, type;
+      type = TypeBuilder("Foo");
+      type.argumentTypes = {
+        foo: Number.Maybe,
+        bar: Number
+      };
+      type.argumentDefaults = [void 0, 0];
+      type.initInstance(function(foo, bar) {
+        expect(foo).toBe(void 0);
+        return expect(bar).toBe(0);
+      });
+      Foo = type.build();
+      return Foo();
     });
   });
   describe("optionTypes { get, set }", function() {
@@ -173,7 +231,7 @@ describe("TypeBuilder.prototype", function() {
       type.optionDefaults = {
         foo: 1
       };
-      type.init(function(options) {
+      type.initInstance(function(options) {
         expect(options).not.toBe(void 0);
         return expect(options.foo).toBe(1);
       });
@@ -186,7 +244,7 @@ describe("TypeBuilder.prototype", function() {
         foo: 1,
         bar: true
       };
-      type.init(function(options) {
+      type.initInstance(function(options) {
         return this.options = options;
       });
       foo = type.construct({

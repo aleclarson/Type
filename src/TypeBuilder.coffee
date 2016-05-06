@@ -1,5 +1,6 @@
 
 { Null, assert, assertType, validateTypes, setType, setKind } = require "type-utils"
+{ throwFailure } = require "failure"
 
 emptyFunction = require "emptyFunction"
 NamedFunction = require "NamedFunction"
@@ -7,7 +8,9 @@ mergeDefaults = require "mergeDefaults"
 Property = require "Property"
 Override = require "override"
 Builder = require "Builder"
+Tracer = require "tracer"
 define = require "define"
+guard = require "guard"
 sync = require "sync"
 
 TypeRegistry = require "./TypeRegistry"
@@ -26,7 +29,7 @@ TypeBuilder = NamedFunction "TypeBuilder", (name, func) ->
 
   TypeBuilder.props.define self, arguments
 
-  BaseObject.call self, func
+  BaseObject.initialize self, func
 
   return self
 
@@ -34,7 +37,11 @@ setKind TypeBuilder, Builder
 
 TypeBuilder.props = Property.Map
 
-  _name: (name) -> name
+  _traceInit: -> Tracer "TypeBuilder()", skip: 2
+
+  _name: (name) ->
+    TypeRegistry.register name, this
+    return name
 
   _argumentTypes: null
 
@@ -73,7 +80,9 @@ TypeBuilder.props = Property.Map
           values.push value
           return values
 
-      @initArguments (args) ->
+      # Argument validation occurs after
+      # the arguments have been initialized!
+      @willBuild -> @initArguments (args) ->
         for type, index in typeList
           assertType args[index], type, keys[index]
         return args
@@ -82,6 +91,7 @@ TypeBuilder.props = Property.Map
     get: -> @_argumentDefaults
     set: (argumentDefaults) ->
 
+      assert @_argumentTypes, "'argumentTypes' must be defined first!"
       assert not @_argumentDefaults, "'argumentDefaults' is already defined!"
 
       assertType argumentDefaults, [ Array, Object ]
@@ -99,8 +109,11 @@ TypeBuilder.props = Property.Map
           return args
         return
 
-      argumentNames = Object.keys argumentDefaults
-      @createArguments (args) ->
+      # Merging default argument values occurs
+      # after the arguments have been created,
+      # but before the arguments are validated!
+      argumentNames = Object.keys @_argumentTypes
+      @initArguments (args) ->
         for name, index in argumentNames
           continue if args[index] isnt undefined
           args[index] = argumentDefaults[name]
@@ -117,17 +130,19 @@ TypeBuilder.props = Property.Map
 
       @_optionTypes = optionTypes
 
+      @didBuild (type) ->
+        type.optionTypes = optionTypes
+
       unless @_optionDefaults
         @createArguments @__createOptions
 
       return unless isDev
 
-      @initArguments (args) ->
+      # Option validation occurs after
+      # the options have been initialized!
+      @willBuild -> @initArguments (args) ->
         validateTypes args[0], optionTypes
         return args
-
-      @didBuild (type) ->
-        type.optionTypes = optionTypes
 
   optionDefaults:
     get: -> @_optionDefaults
@@ -142,29 +157,39 @@ TypeBuilder.props = Property.Map
       @didBuild (type) ->
         type.optionDefaults = optionDefaults
 
-      @createArguments (args) ->
-        mergeDefaults args[0], optionDefaults
-        return args
-
       unless @_optionTypes
         @createArguments @__createOptions
 
-define TypeBuilder.prototype,
+      # Merging default option values occurs
+      # after the options have been created,
+      # but before the options are validated!
+      @initArguments (args) ->
+        mergeDefaults args[0], optionDefaults
+        return args
 
-  construct: ->
-    @build().apply null, arguments
+define TypeBuilder.prototype,
 
   inherits: (kind) ->
 
     assertType kind, [ Function.Kind, Null ]
+    assert not @_kind, { builder: this, kind, reason: "'kind' is already defined!" }
 
     @_kind = kind
 
-    if kind is null
-      @_createInstance = -> Object.create null
-      return
+    # Allow types to override the default 'createInstance'.
+    @willBuild ->
 
-    @_createInstance = (args) -> kind.apply null, args
+      return if @_createInstance
+
+      if kind is null
+        @_createInstance = -> Object.create null
+        return
+
+      builder = this
+      @_createInstance = (args) ->
+        guard -> kind.apply null, args
+        .fail (error) -> throwFailure error, { type: builder._cachedBuild, kind, args }
+
     return
 
   createArguments: (fn) ->
@@ -174,7 +199,9 @@ define TypeBuilder.prototype,
 
   initArguments: (fn) ->
     assertType fn, Function
-    @_phases.initArguments.push fn
+    @_phases.initArguments.push (args) ->
+      fn args
+      return args
     return
 
   returnCached: (fn) ->
@@ -192,6 +219,7 @@ define TypeBuilder.prototype,
   overrideMethods: (overrides) ->
 
     assertType overrides, Object
+    assert @_kind, "'kind' must be defined first!"
 
     name = @_name
     kind = @_kind
@@ -207,13 +235,19 @@ define TypeBuilder.prototype,
 
 define TypeBuilder.prototype,
 
+  build: ->
+    args = arguments
+    guard => Builder::build.apply this, args
+    .fail (error) =>
+      stack = @_traceInit() if isDev
+      throwFailure error, { stack }
+
   __createOptions: (args) ->
     args[0] = {} if args[0] is undefined
     assertType args[0], Object, "options"
     return args
 
   __createType: (type) ->
-    TypeRegistry.register @_name
     type = NamedFunction @_name, type
     setKind type, @_kind
     return type
@@ -233,9 +267,12 @@ define TypeBuilder.prototype,
         assert (Array.isArray args), "Must return an Array of arguments!"
       return args
 
-  __createConstructor: ->
+  __createConstructor: (createInstance) ->
+    BaseObject.createConstructor createInstance
 
-    constructor = Builder::__createConstructor.call this
+  __wrapConstructor: ->
+
+    createInstance = Builder::__wrapConstructor.apply this, arguments
 
     getCacheId = @_getCacheID
     if getCacheId
@@ -244,9 +281,9 @@ define TypeBuilder.prototype,
         if id isnt undefined
           self = type.cache[id]
           if self is undefined
-            self = constructor type, args
+            self = createInstance type, args
             type.cache[id] = self
-        else self = constructor type, args
+        else self = createInstance type, args
         return self
 
     getExisting = @_getExisting
@@ -254,6 +291,6 @@ define TypeBuilder.prototype,
       return (type, args) ->
         self = getExisting.apply null, args
         return self if self isnt undefined
-        return constructor type, args
+        return createInstance type, args
 
-    return constructor
+    return createInstance

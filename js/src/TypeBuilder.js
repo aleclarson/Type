@@ -1,6 +1,8 @@
-var BaseObject, Builder, NamedFunction, Null, Override, Property, TypeBuilder, TypeRegistry, assert, assertType, define, emptyFunction, mergeDefaults, ref, setKind, setType, sync, validateTypes;
+var BaseObject, Builder, NamedFunction, Null, Override, Property, Tracer, TypeBuilder, TypeRegistry, assert, assertType, define, emptyFunction, guard, mergeDefaults, ref, setKind, setType, sync, throwFailure, validateTypes;
 
 ref = require("type-utils"), Null = ref.Null, assert = ref.assert, assertType = ref.assertType, validateTypes = ref.validateTypes, setType = ref.setType, setKind = ref.setKind;
+
+throwFailure = require("failure").throwFailure;
 
 emptyFunction = require("emptyFunction");
 
@@ -14,7 +16,11 @@ Override = require("override");
 
 Builder = require("Builder");
 
+Tracer = require("tracer");
+
 define = require("define");
+
+guard = require("guard");
 
 sync = require("sync");
 
@@ -29,14 +35,20 @@ module.exports = TypeBuilder = NamedFunction("TypeBuilder", function(name, func)
   self._phases.initArguments = [];
   setType(self, TypeBuilder);
   TypeBuilder.props.define(self, arguments);
-  BaseObject.call(self, func);
+  BaseObject.initialize(self, func);
   return self;
 });
 
 setKind(TypeBuilder, Builder);
 
 TypeBuilder.props = Property.Map({
+  _traceInit: function() {
+    return Tracer("TypeBuilder()", {
+      skip: 2
+    });
+  },
   _name: function(name) {
+    TypeRegistry.register(name, this);
     return name;
   },
   _argumentTypes: null,
@@ -54,7 +66,7 @@ TypeBuilder.props = Property.Map({
       assert(!this._argumentTypes, "'argumentTypes' is already defined!");
       assertType(argumentTypes, [Array, Object]);
       this._argumentTypes = argumentTypes;
-      this._phases.initType.push(function(type) {
+      this.didBuild(function(type) {
         return type.argumentTypes = argumentTypes;
       });
       if (!isDev) {
@@ -72,13 +84,15 @@ TypeBuilder.props = Property.Map({
           return values;
         });
       }
-      return this._phases.initArguments.push(function(args) {
-        var i, index, len, type;
-        for (index = i = 0, len = typeList.length; i < len; index = ++i) {
-          type = typeList[index];
-          assertType(args[index], type, keys[index]);
-        }
-        return args;
+      return this.willBuild(function() {
+        return this.initArguments(function(args) {
+          var i, index, len, type;
+          for (index = i = 0, len = typeList.length; i < len; index = ++i) {
+            type = typeList[index];
+            assertType(args[index], type, keys[index]);
+          }
+          return args;
+        });
       });
     }
   },
@@ -88,14 +102,15 @@ TypeBuilder.props = Property.Map({
     },
     set: function(argumentDefaults) {
       var argumentNames;
+      assert(this._argumentTypes, "'argumentTypes' must be defined first!");
       assert(!this._argumentDefaults, "'argumentDefaults' is already defined!");
       assertType(argumentDefaults, [Array, Object]);
       this._argumentDefaults = argumentDefaults;
-      this._phases.initType.push(function(type) {
+      this.didBuild(function(type) {
         return type.argumentDefaults = argumentDefaults;
       });
       if (Array.isArray(argumentDefaults)) {
-        this._phases.initArguments.unshift(function(args) {
+        this.createArguments(function(args) {
           var i, index, len, value;
           for (index = i = 0, len = argumentDefaults.length; i < len; index = ++i) {
             value = argumentDefaults[index];
@@ -108,8 +123,8 @@ TypeBuilder.props = Property.Map({
         });
         return;
       }
-      argumentNames = Object.keys(argumentDefaults);
-      this._phases.initArguments.unshift(function(args) {
+      argumentNames = Object.keys(this._argumentTypes);
+      this.initArguments(function(args) {
         var i, index, len, name;
         for (index = i = 0, len = argumentNames.length; i < len; index = ++i) {
           name = argumentNames[index];
@@ -130,18 +145,21 @@ TypeBuilder.props = Property.Map({
       assert(!this._optionTypes, "'optionTypes' is already defined!");
       assertType(optionTypes, Object);
       this._optionTypes = optionTypes;
+      this.didBuild(function(type) {
+        return type.optionTypes = optionTypes;
+      });
       if (!this._optionDefaults) {
         this.createArguments(this.__createOptions);
       }
-      if (isDev) {
-        this._phases.initArguments.push(function(args) {
+      if (!isDev) {
+        return;
+      }
+      return this.willBuild(function() {
+        return this.initArguments(function(args) {
           validateTypes(args[0], optionTypes);
           return args;
         });
-        return this._phases.initType.push(function(type) {
-          return type.optionTypes = optionTypes;
-        });
-      }
+      });
     }
   },
   optionDefaults: {
@@ -152,57 +170,80 @@ TypeBuilder.props = Property.Map({
       assert(!this._optionDefaults, "'optionDefaults' is already defined!");
       assertType(optionDefaults, Object);
       this._optionDefaults = optionDefaults;
+      this.didBuild(function(type) {
+        return type.optionDefaults = optionDefaults;
+      });
       if (!this._optionTypes) {
         this.createArguments(this.__createOptions);
       }
-      this._phases.initArguments.unshift(function(args) {
+      return this.initArguments(function(args) {
         mergeDefaults(args[0], optionDefaults);
         return args;
-      });
-      return this._phases.initType.push(function(type) {
-        return type.optionDefaults = optionDefaults;
       });
     }
   }
 });
 
 define(TypeBuilder.prototype, {
-  construct: function() {
-    return this.build().apply(null, arguments);
-  },
   inherits: function(kind) {
     assertType(kind, [Function.Kind, Null]);
+    assert(!this._kind, {
+      builder: this,
+      kind: kind,
+      reason: "'kind' is already defined!"
+    });
     this._kind = kind;
-    if (kind === null) {
-      this._createInstance = function() {
-        return Object.create(null);
+    this.willBuild(function() {
+      var builder;
+      if (this._createInstance) {
+        return;
+      }
+      if (kind === null) {
+        this._createInstance = function() {
+          return Object.create(null);
+        };
+        return;
+      }
+      builder = this;
+      return this._createInstance = function(args) {
+        return guard(function() {
+          return kind.apply(null, args);
+        }).fail(function(error) {
+          return throwFailure(error, {
+            type: builder._cachedBuild,
+            kind: kind,
+            args: args
+          });
+        });
       };
-      return;
-    }
-    this._createInstance = function(args) {
-      return kind.apply(null, args);
-    };
-  },
-  createArguments: function(createArguments) {
-    assertType(createArguments, Function);
-    this._phases.build.push(function() {
-      return this._phases.initArguments.unshift(createArguments);
     });
   },
-  returnCached: function(getCacheID) {
-    assertType(getCacheID, Function);
-    this._getCacheID = getCacheID;
-    this._phases.initType.push(function(type) {
+  createArguments: function(fn) {
+    assertType(fn, Function);
+    this._phases.initArguments.unshift(fn);
+  },
+  initArguments: function(fn) {
+    assertType(fn, Function);
+    this._phases.initArguments.push(function(args) {
+      fn(args);
+      return args;
+    });
+  },
+  returnCached: function(fn) {
+    assertType(fn, Function);
+    this._getCacheID = fn;
+    this.didBuild(function(type) {
       return type.cache = Object.create(null);
     });
   },
-  returnExisting: function(getExisting) {
-    assertType(getExisting, Function);
-    this._getExisting = getExisting;
+  returnExisting: function(fn) {
+    assertType(fn, Function);
+    this._getExisting = fn;
   },
   overrideMethods: function(overrides) {
     var func, key, kind, methods, name;
     assertType(overrides, Object);
+    assert(this._kind, "'kind' must be defined first!");
     name = this._name;
     kind = this._kind;
     methods = {};
@@ -215,7 +256,7 @@ define(TypeBuilder.prototype, {
         func: func
       });
     }
-    return this._phases.initType.push(function(type) {
+    return this.didBuild(function(type) {
       Override.augment(type);
       return define(type.prototype, methods);
     });
@@ -223,6 +264,25 @@ define(TypeBuilder.prototype, {
 });
 
 define(TypeBuilder.prototype, {
+  build: function() {
+    var args;
+    args = arguments;
+    return guard((function(_this) {
+      return function() {
+        return Builder.prototype.build.apply(_this, args);
+      };
+    })(this)).fail((function(_this) {
+      return function(error) {
+        var stack;
+        if (isDev) {
+          stack = _this._traceInit();
+        }
+        return throwFailure(error, {
+          stack: stack
+        });
+      };
+    })(this));
+  },
   __createOptions: function(args) {
     if (args[0] === void 0) {
       args[0] = {};
@@ -231,7 +291,6 @@ define(TypeBuilder.prototype, {
     return args;
   },
   __createType: function(type) {
-    TypeRegistry.register(this._name);
     type = NamedFunction(this._name, type);
     setKind(type, this._kind);
     return type;
@@ -257,9 +316,12 @@ define(TypeBuilder.prototype, {
       return args;
     };
   },
-  __createConstructor: function() {
-    var constructor, getCacheId, getExisting;
-    constructor = Builder.prototype.__createConstructor.call(this);
+  __createConstructor: function(createInstance) {
+    return BaseObject.createConstructor(createInstance);
+  },
+  __wrapConstructor: function() {
+    var createInstance, getCacheId, getExisting;
+    createInstance = Builder.prototype.__wrapConstructor.apply(this, arguments);
     getCacheId = this._getCacheID;
     if (getCacheId) {
       return function(type, args) {
@@ -268,11 +330,11 @@ define(TypeBuilder.prototype, {
         if (id !== void 0) {
           self = type.cache[id];
           if (self === void 0) {
-            self = constructor(type, args);
+            self = createInstance(type, args);
             type.cache[id] = self;
           }
         } else {
-          self = constructor(type, args);
+          self = createInstance(type, args);
         }
         return self;
       };
@@ -285,10 +347,10 @@ define(TypeBuilder.prototype, {
         if (self !== void 0) {
           return self;
         }
-        return constructor(type, args);
+        return createInstance(type, args);
       };
     }
-    return constructor;
+    return createInstance;
   }
 });
 
