@@ -2,7 +2,7 @@ var assert, registry;
 
 require("isDev");
 
-assert = require("type-utils").assert;
+assert = require("assert");
 
 registry = Object.create(null);
 

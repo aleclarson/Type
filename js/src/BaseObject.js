@@ -1,16 +1,18 @@
-var Property, assertType, instanceID, instanceType, props, ref, setType;
+var Property, assertType, instanceID, instanceType, mixin, props, setType;
 
-ref = require("type-utils"), setType = ref.setType, assertType = ref.assertType;
+assertType = require("assertType");
 
 Property = require("Property");
+
+setType = require("setType");
 
 instanceType = null;
 
 instanceID = null;
 
-module.exports = {
+module.exports = mixin = {
   initialize: function(type, func) {
-    type.didBuild(this.didBuild);
+    type.didBuild(mixin.didBuild);
     if (func !== void 0) {
       assertType(func, Function);
       type._kind = Function;

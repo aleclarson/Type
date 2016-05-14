@@ -1,18 +1,20 @@
 
-{ Kind
-  Maybe
-  setType
-  setKind
-  assertType } = require "type-utils"
-
 NamedFunction = require "NamedFunction"
+assertType = require "assertType"
 Builder = require "Builder"
+setKind = require "setKind"
+setType = require "setType"
+Tracer = require "tracer"
 define = require "define"
+Maybe = require "Maybe"
+Kind = require "Kind"
 
 module.exports =
 Type = NamedFunction "Type", (name, func) ->
 
   self = Type.Builder name, func
+
+  self._traceInit = Tracer "Type()", skip: 1
 
   self.didBuild (type) ->
     Type.augment type

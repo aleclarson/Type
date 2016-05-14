@@ -1,14 +1,18 @@
-var BaseObject, Builder, NamedFunction, Null, Override, Property, Tracer, TypeBuilder, TypeRegistry, assert, assertType, define, emptyFunction, guard, mergeDefaults, ref, setKind, setType, sync, throwFailure, validateTypes;
-
-ref = require("type-utils"), Null = ref.Null, assert = ref.assert, assertType = ref.assertType, validateTypes = ref.validateTypes, setType = ref.setType, setKind = ref.setKind;
+var BaseObject, Builder, NamedFunction, Null, Override, Property, Shape, TypeBuilder, TypeRegistry, assert, assertType, assertTypes, combine, define, emptyFunction, guard, isConstructor, mergeDefaults, setKind, setType, sync, throwFailure;
 
 throwFailure = require("failure").throwFailure;
 
-emptyFunction = require("emptyFunction");
-
 NamedFunction = require("NamedFunction");
 
+emptyFunction = require("emptyFunction");
+
 mergeDefaults = require("mergeDefaults");
+
+isConstructor = require("isConstructor");
+
+assertTypes = require("assertTypes");
+
+assertType = require("assertType");
 
 Property = require("Property");
 
@@ -16,11 +20,21 @@ Override = require("override");
 
 Builder = require("Builder");
 
-Tracer = require("tracer");
+setKind = require("setKind");
+
+setType = require("setType");
+
+combine = require("combine");
+
+assert = require("assert");
 
 define = require("define");
 
+Shape = require("Shape");
+
 guard = require("guard");
+
+Null = require("Null");
 
 sync = require("sync");
 
@@ -30,7 +44,6 @@ BaseObject = require("./BaseObject");
 
 module.exports = TypeBuilder = NamedFunction("TypeBuilder", function(name, func) {
   var self;
-  assertType(name, String);
   self = Builder();
   self._phases.initArguments = [];
   setType(self, TypeBuilder);
@@ -42,14 +55,11 @@ module.exports = TypeBuilder = NamedFunction("TypeBuilder", function(name, func)
 setKind(TypeBuilder, Builder);
 
 TypeBuilder.props = Property.Map({
-  _traceInit: function() {
-    return Tracer("TypeBuilder()", {
-      skip: 2
-    });
-  },
   _name: function(name) {
-    TypeRegistry.register(name, this);
-    return name;
+    if (name) {
+      TypeRegistry.register(name, this);
+    }
+    return name || "";
   },
   _argumentTypes: null,
   _argumentDefaults: null,
@@ -65,6 +75,12 @@ TypeBuilder.props = Property.Map({
       var keys, typeList;
       assert(!this._argumentTypes, "'argumentTypes' is already defined!");
       assertType(argumentTypes, [Array, Object]);
+      argumentTypes = sync.map(argumentTypes, function(type) {
+        if (!isConstructor(type, Object)) {
+          return type;
+        }
+        return Shape(type);
+      });
       this._argumentTypes = argumentTypes;
       this.didBuild(function(type) {
         return type.argumentTypes = argumentTypes;
@@ -125,13 +141,18 @@ TypeBuilder.props = Property.Map({
       }
       argumentNames = Object.keys(this._argumentTypes);
       this.initArguments(function(args) {
-        var i, index, len, name;
+        var i, index, len, name, value;
         for (index = i = 0, len = argumentNames.length; i < len; index = ++i) {
           name = argumentNames[index];
           if (args[index] !== void 0) {
             continue;
           }
-          args[index] = argumentDefaults[name];
+          value = argumentDefaults[name];
+          if (isConstructor(value, Object)) {
+            args[index] = combine(args[index], value);
+          } else {
+            args[index] = value;
+          }
         }
         return args;
       });
@@ -156,7 +177,7 @@ TypeBuilder.props = Property.Map({
       }
       return this.willBuild(function() {
         return this.initArguments(function(args) {
-          validateTypes(args[0], optionTypes);
+          assertTypes(args[0], optionTypes);
           return args;
         });
       });
@@ -310,8 +331,12 @@ define(TypeBuilder.prototype, {
       }
       for (j = 0, len1 = phases.length; j < len1; j++) {
         phase = phases[j];
-        args = phase(args);
-        assert(Array.isArray(args), "Must return an Array of arguments!");
+        args = phase.call(null, args);
+        assert(Array.isArray(args), {
+          args: args,
+          phase: phase,
+          reason: "Must return an Array of arguments!"
+        });
       }
       return args;
     };

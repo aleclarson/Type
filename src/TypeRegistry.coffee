@@ -1,7 +1,7 @@
 
 require "isDev"
 
-{ assert } = require "type-utils"
+assert = require "assert"
 
 registry = Object.create null
 

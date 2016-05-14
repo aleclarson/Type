@@ -1,16 +1,23 @@
 
-{ Null, assert, assertType, validateTypes, setType, setKind } = require "type-utils"
 { throwFailure } = require "failure"
 
-emptyFunction = require "emptyFunction"
 NamedFunction = require "NamedFunction"
+emptyFunction = require "emptyFunction"
 mergeDefaults = require "mergeDefaults"
+isConstructor = require "isConstructor"
+assertTypes = require "assertTypes"
+assertType = require "assertType"
 Property = require "Property"
 Override = require "override"
 Builder = require "Builder"
-Tracer = require "tracer"
+setKind = require "setKind"
+setType = require "setType"
+combine = require "combine"
+assert = require "assert"
 define = require "define"
+Shape = require "Shape"
 guard = require "guard"
+Null = require "Null"
 sync = require "sync"
 
 TypeRegistry = require "./TypeRegistry"
@@ -18,8 +25,6 @@ BaseObject = require "./BaseObject"
 
 module.exports =
 TypeBuilder = NamedFunction "TypeBuilder", (name, func) ->
-
-  assertType name, String
 
   self = Builder()
 
@@ -37,11 +42,9 @@ setKind TypeBuilder, Builder
 
 TypeBuilder.props = Property.Map
 
-  _traceInit: -> Tracer "TypeBuilder()", skip: 2
-
   _name: (name) ->
-    TypeRegistry.register name, this
-    return name
+    TypeRegistry.register name, this if name
+    return name or ""
 
   _argumentTypes: null
 
@@ -62,6 +65,10 @@ TypeBuilder.props = Property.Map
       assert not @_argumentTypes, "'argumentTypes' is already defined!"
 
       assertType argumentTypes, [ Array, Object ]
+
+      argumentTypes = sync.map argumentTypes, (type) ->
+        return type if not isConstructor type, Object
+        return Shape type
 
       @_argumentTypes = argumentTypes
 
@@ -116,7 +123,10 @@ TypeBuilder.props = Property.Map
       @initArguments (args) ->
         for name, index in argumentNames
           continue if args[index] isnt undefined
-          args[index] = argumentDefaults[name]
+          value = argumentDefaults[name]
+          if isConstructor value, Object
+            args[index] = combine args[index], value
+          else args[index] = value
         return args
       return
 
@@ -141,7 +151,7 @@ TypeBuilder.props = Property.Map
       # Option validation occurs after
       # the options have been initialized!
       @willBuild -> @initArguments (args) ->
-        validateTypes args[0], optionTypes
+        assertTypes args[0], optionTypes
         return args
 
   optionDefaults:
@@ -263,8 +273,8 @@ define TypeBuilder.prototype,
       args = [] # The 'initialArgs' should not be leaked.
       args.push arg for arg in initialArgs
       for phase in phases
-        args = phase args
-        assert (Array.isArray args), "Must return an Array of arguments!"
+        args = phase.call null, args
+        assert Array.isArray(args), { args, phase, reason: "Must return an Array of arguments!" }
       return args
 
   __createConstructor: (createInstance) ->

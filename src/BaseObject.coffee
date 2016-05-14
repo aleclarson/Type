@@ -1,17 +1,17 @@
 
-{ setType, assertType } = require "type-utils"
-
+assertType = require "assertType"
 Property = require "Property"
+setType = require "setType"
 
 # These reflect the instance being built.
 instanceType = null
 instanceID = null
 
-module.exports =
+module.exports = mixin =
 
   initialize: (type, func) ->
 
-    type.didBuild @didBuild
+    type.didBuild mixin.didBuild
 
     if func isnt undefined
       assertType func, Function
