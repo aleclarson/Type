@@ -8,7 +8,6 @@ isConstructor = require "isConstructor"
 assertTypes = require "assertTypes"
 assertType = require "assertType"
 Property = require "Property"
-Override = require "override"
 Builder = require "Builder"
 setKind = require "setKind"
 setType = require "setType"
@@ -21,20 +20,17 @@ Null = require "Null"
 sync = require "sync"
 
 TypeRegistry = require "./TypeRegistry"
-BaseObject = require "./BaseObject"
 
 module.exports =
 TypeBuilder = NamedFunction "TypeBuilder", (name, func) ->
 
-  self = Builder()
-
-  self._phases.initArguments = []
+  self = Builder name, func
 
   setType self, TypeBuilder
 
-  TypeBuilder.props.define self, arguments
+  TypeRegistry.register name, self if name
 
-  BaseObject.initialize self, func
+  TypeBuilder.props.define self, arguments
 
   return self
 
@@ -42,9 +38,7 @@ setKind TypeBuilder, Builder
 
 TypeBuilder.props = Property.Map
 
-  _name: (name) ->
-    TypeRegistry.register name, this if name
-    return name or ""
+  _initArguments: -> []
 
   _argumentTypes: null
 
@@ -57,6 +51,8 @@ TypeBuilder.props = Property.Map
   _getCacheID: null
 
   _getExisting: null
+
+define TypeBuilder.prototype,
 
   argumentTypes:
     get: -> @_argumentTypes
@@ -72,7 +68,7 @@ TypeBuilder.props = Property.Map
 
       @_argumentTypes = argumentTypes
 
-      @didBuild (type) ->
+      @_didBuild.push (type) ->
         type.argumentTypes = argumentTypes
 
       return unless isDev
@@ -89,7 +85,7 @@ TypeBuilder.props = Property.Map
 
       # Argument validation occurs after
       # the arguments have been initialized!
-      @willBuild -> @initArguments (args) ->
+      @_willBuild.push -> @initArguments (args) ->
         for type, index in typeList
           assertType args[index], type, keys[index]
         return args
@@ -105,7 +101,7 @@ TypeBuilder.props = Property.Map
 
       @_argumentDefaults = argumentDefaults
 
-      @didBuild (type) ->
+      @_didBuild.push (type) ->
         type.argumentDefaults = argumentDefaults
 
       if Array.isArray argumentDefaults
@@ -140,7 +136,7 @@ TypeBuilder.props = Property.Map
 
       @_optionTypes = optionTypes
 
-      @didBuild (type) ->
+      @_didBuild.push (type) ->
         type.optionTypes = optionTypes
 
       unless @_optionDefaults
@@ -150,7 +146,7 @@ TypeBuilder.props = Property.Map
 
       # Option validation occurs after
       # the options have been initialized!
-      @willBuild -> @initArguments (args) ->
+      @_willBuild.push -> @initArguments (args) ->
         assertTypes args[0], optionTypes
         return args
 
@@ -164,7 +160,7 @@ TypeBuilder.props = Property.Map
 
       @_optionDefaults = optionDefaults
 
-      @didBuild (type) ->
+      @_didBuild.push (type) ->
         type.optionDefaults = optionDefaults
 
       unless @_optionTypes
@@ -177,94 +173,40 @@ TypeBuilder.props = Property.Map
         mergeDefaults args[0], optionDefaults
         return args
 
-define TypeBuilder.prototype,
-
-  inherits: (kind) ->
-
-    assertType kind, [ Function.Kind, Null ]
-    assert not @_kind, { builder: this, kind, reason: "'kind' is already defined!" }
-
-    @_kind = kind
-
-    # Allow types to override the default 'createInstance'.
-    @willBuild ->
-
-      return if @_createInstance
-
-      if kind is null
-        @_createInstance = -> Object.create null
-        return
-
-      builder = this
-      @_createInstance = (args) ->
-        guard -> kind.apply null, args
-        .fail (error) -> throwFailure error, { type: builder._cachedBuild, kind, args }
-
+  createArguments: (func) ->
+    assertType func, Function
+    @_initArguments.unshift func
     return
 
-  createArguments: (fn) ->
-    assertType fn, Function
-    @_phases.initArguments.unshift fn
-    return
-
-  initArguments: (fn) ->
-    assertType fn, Function
-    @_phases.initArguments.push (args) ->
-      fn args
+  initArguments: (func) ->
+    assertType func, Function
+    @_initArguments.push (args) ->
+      func.call null, args
       return args
     return
 
-  returnCached: (fn) ->
-    assertType fn, Function
-    @_getCacheID = fn
-    @didBuild (type) ->
+  returnCached: (func) ->
+    assertType func, Function
+    @_getCacheID = func
+    @_didBuild.push (type) ->
       type.cache = Object.create null
     return
 
-  returnExisting: (fn) ->
-    assertType fn, Function
-    @_getExisting = fn
+  returnExisting: (func) ->
+    assertType func, Function
+    @_getExisting = func
     return
 
-  overrideMethods: (overrides) ->
-
-    assertType overrides, Object
-    assert @_kind, "'kind' must be defined first!"
-
-    name = @_name
-    kind = @_kind
-
-    methods = {}
-    for key, func of overrides
-      assertType func, Function, name + "::" + key
-      methods[key] = Override { key, kind, func }
-
-    @didBuild (type) ->
-      Override.augment type
-      define type.prototype, methods
-
 define TypeBuilder.prototype,
-
-  build: ->
-    args = arguments
-    guard => Builder::build.apply this, args
-    .fail (error) =>
-      stack = @_traceInit() if isDev
-      throwFailure error, { stack }
 
   __createOptions: (args) ->
     args[0] = {} if args[0] is undefined
     assertType args[0], Object, "options"
     return args
 
-  __createType: (type) ->
-    type = NamedFunction @_name, type
-    setKind type, @_kind
-    return type
+  __buildArgumentCreator: ->
 
-  __createArgTransformer: ->
-
-    phases = @_phases.initArguments
+    phases = @_initArguments
 
     if phases.length is 0
       return emptyFunction.thatReturnsArgument
@@ -277,30 +219,24 @@ define TypeBuilder.prototype,
         assert Array.isArray(args), { args, phase, reason: "Must return an Array of arguments!" }
       return args
 
-  __createConstructor: (createInstance) ->
-    BaseObject.createConstructor createInstance
+  __buildInstanceCreator: ->
 
-  __wrapConstructor: ->
+    createInstance = Builder::__buildInstanceCreator.call this
 
-    createInstance = Builder::__wrapConstructor.apply this, arguments
-
-    getCacheId = @_getCacheID
-    if getCacheId
+    getCacheID = @_getCacheID
+    if getCacheID
       return (type, args) ->
-        id = getCacheId.apply null, args
-        if id isnt undefined
-          self = type.cache[id]
-          if self is undefined
-            self = createInstance type, args
-            type.cache[id] = self
-        else self = createInstance type, args
-        return self
+        id = getCacheID.apply null, args
+        return createInstance type, args if id is undefined
+        instance = type.cache[id]
+        return instance if instance
+        return type.cache[id] = createInstance type, args
 
     getExisting = @_getExisting
     if getExisting
       return (type, args) ->
-        self = getExisting.apply null, args
-        return self if self isnt undefined
+        instance = getExisting.apply null, args
+        return instance if instance
         return createInstance type, args
 
     return createInstance

@@ -17,8 +17,8 @@ module.exports =
 
       value = registry[name]
       if isDev
-        stack = [ builder._traceInit() ]
-        stack.push value._traceInit() if value
+        stack = [ builder._tracer() ]
+        stack.push value._tracer() if value
 
       reason: "A type named '#{name}' already exists!"
       stack: stack

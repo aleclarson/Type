@@ -16,9 +16,9 @@ module.exports = {
       var stack, value;
       value = registry[name];
       if (isDev) {
-        stack = [builder._traceInit()];
+        stack = [builder._tracer()];
         if (value) {
-          stack.push(value._traceInit());
+          stack.push(value._tracer());
         }
       }
       return {

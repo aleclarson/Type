@@ -14,7 +14,7 @@ Type = NamedFunction "Type", (name, func) ->
 
   self = Type.Builder name, func
 
-  self._traceInit = Tracer "Type()", skip: 1
+  self._tracer = Tracer "Type()", skip: 1
 
   self.didBuild (type) ->
     Type.augment type

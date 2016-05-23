@@ -21,7 +21,7 @@ Kind = require("Kind");
 module.exports = Type = NamedFunction("Type", function(name, func) {
   var self;
   self = Type.Builder(name, func);
-  self._traceInit = Tracer("Type()", {
+  self._tracer = Tracer("Type()", {
     skip: 1
   });
   self.didBuild(function(type) {
