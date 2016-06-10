@@ -1,4 +1,4 @@
-var Builder, NamedFunction, Null, Property, Shape, TypeBuilder, TypeRegistry, assert, assertType, assertTypes, combine, define, emptyFunction, guard, isConstructor, mergeDefaults, setKind, setType, sync, throwFailure;
+var Builder, NamedFunction, Null, Property, Shape, TypeBuilder, TypeRegistry, Void, assert, assertType, assertTypes, combine, define, emptyFunction, guard, has, hasKeys, isConstructor, isType, mergeDefaults, setKind, setType, sync, throwFailure;
 
 throwFailure = require("failure").throwFailure;
 
@@ -22,7 +22,11 @@ setKind = require("setKind");
 
 setType = require("setType");
 
+hasKeys = require("hasKeys");
+
 combine = require("combine");
+
+isType = require("isType");
 
 assert = require("assert");
 
@@ -34,7 +38,11 @@ guard = require("guard");
 
 Null = require("Null");
 
+Void = require("Void");
+
 sync = require("sync");
+
+has = require("has");
 
 TypeRegistry = require("./TypeRegistry");
 
@@ -57,6 +65,7 @@ TypeBuilder.props = Property.Map({
   },
   _argumentTypes: null,
   _argumentDefaults: null,
+  _options: null,
   _optionTypes: null,
   _optionDefaults: null,
   _getCacheID: null,
@@ -64,6 +73,133 @@ TypeBuilder.props = Property.Map({
 });
 
 define(TypeBuilder.prototype, {
+  optionTypes: {
+    get: function() {
+      return this._optionTypes;
+    },
+    set: function(optionTypes) {
+      assert(!this._options, "Cannot set 'optionTypes' after calling 'defineOptions'!");
+      assert(!this._optionTypes, "'optionTypes' is already defined!");
+      assertType(optionTypes, Object);
+      this._optionTypes = optionTypes;
+      this._didBuild.push(function(type) {
+        return type.optionTypes = optionTypes;
+      });
+      if (!this._optionDefaults) {
+        this._initArguments.unshift(function(args) {
+          if (args[0] === void 0) {
+            args[0] = {};
+          }
+          assertType(args[0], Object, "options");
+          return args;
+        });
+      }
+      if (!isDev) {
+        return;
+      }
+      return this._willBuild.push(function() {
+        return this.initArguments(function(args) {
+          assertTypes(args[0], optionTypes);
+          return args;
+        });
+      });
+    }
+  },
+  optionDefaults: {
+    get: function() {
+      return this._optionDefaults;
+    },
+    set: function(optionDefaults) {
+      assert(!this._options, "Cannot set 'optionDefaults' after calling 'defineOptions'!");
+      assert(!this._optionDefaults, "'optionDefaults' is already defined!");
+      assertType(optionDefaults, Object);
+      this._optionDefaults = optionDefaults;
+      this._didBuild.push(function(type) {
+        return type.optionDefaults = optionDefaults;
+      });
+      if (!this._optionTypes) {
+        this._initArguments.unshift(function(args) {
+          if (args[0] === void 0) {
+            args[0] = {};
+          }
+          assertType(args[0], Object, "options");
+          return args;
+        });
+      }
+      return this._initArguments.push(function(args) {
+        mergeDefaults(args[0], optionDefaults);
+        return args;
+      });
+    }
+  },
+  defineOptions: function(argIndex, optionConfigs) {
+    var optionDefaults, optionTypes;
+    assert(!this._optionTypes, "Cannot call 'defineOptions' after setting 'optionTypes'!");
+    assert(!this._optionDefaults, "Cannot call 'defineOptions' after setting 'optionDefaults'!");
+    if (arguments.length === 1) {
+      optionConfigs = argIndex;
+      argIndex = 0;
+    }
+    assertType(argIndex, Number);
+    assertType(optionConfigs, Object);
+    if (this._options) {
+      assert(!this._options[argIndex], "Already called 'defineOptions' with an 'argIndex' equal to " + argIndex + "!");
+    } else {
+      this._options = [];
+    }
+    this._options[argIndex] = optionConfigs;
+    optionTypes = {};
+    optionDefaults = {};
+    sync.each(optionConfigs, function(optionConfig, optionName) {
+      var optionType;
+      if (optionType = optionConfig.type) {
+        if (!optionConfig.required) {
+          optionType = optionType.Maybe || [optionType, Void];
+        }
+        optionTypes[optionName] = optionType;
+      }
+      if (has(optionConfig, "default")) {
+        return optionDefaults[optionName] = optionConfig["default"];
+      }
+    });
+    this._didBuild.push(function(type) {
+      if (hasKeys(optionTypes)) {
+        type.optionTypes = optionTypes;
+      }
+      if (hasKeys(optionDefaults)) {
+        return type.optionDefaults = optionDefaults;
+      }
+    });
+    return this._initArguments.push(function(args) {
+      var option, optionConfig, optionName, options;
+      options = args[argIndex];
+      if (options === void 0) {
+        args[argIndex] = options = {};
+      }
+      assertType(args[0], Object, "options");
+      for (optionName in optionConfigs) {
+        optionConfig = optionConfigs[optionName];
+        option = options[optionName];
+        if (option === void 0) {
+          if (has(optionConfig, "default")) {
+            options[optionName] = option = optionConfig["default"];
+          } else if (isType(optionConfig.merge, Object)) {
+            if (isType(option, Object)) {
+              options[optionName] = combine(option, optionConfig.merge);
+            } else {
+              options[optionName] = optionConfig.merge;
+            }
+          } else if (!optionConfig.required) {
+            continue;
+          }
+        } else if (isType(optionConfig.merge, Object)) {
+          options[optionName] = option = combine({}, optionConfig["default"], option);
+        }
+        assertType(option, optionConfig.type, "options." + optionName);
+      }
+      return args;
+    });
+  },
   argumentTypes: {
     get: function() {
       return this._argumentTypes;
@@ -123,21 +259,25 @@ define(TypeBuilder.prototype, {
         return type.argumentDefaults = argumentDefaults;
       });
       if (Array.isArray(argumentDefaults)) {
-        this.createArguments(function(args) {
+        this._initArguments.unshift(function(args) {
           var i, index, len, value;
           for (index = i = 0, len = argumentDefaults.length; i < len; index = ++i) {
             value = argumentDefaults[index];
             if (args[index] !== void 0) {
               continue;
             }
-            args[index] = value;
+            if (isConstructor(value, Object)) {
+              args[index] = combine(args[index], value);
+            } else {
+              args[index] = value;
+            }
           }
           return args;
         });
         return;
       }
       argumentNames = Object.keys(this._argumentTypes);
-      this.initArguments(function(args) {
+      this._initArguments.push(function(args) {
         var i, index, len, name, value;
         for (index = i = 0, len = argumentNames.length; i < len; index = ++i) {
           name = argumentNames[index];
@@ -151,51 +291,6 @@ define(TypeBuilder.prototype, {
             args[index] = value;
           }
         }
-        return args;
-      });
-    }
-  },
-  optionTypes: {
-    get: function() {
-      return this._optionTypes;
-    },
-    set: function(optionTypes) {
-      assert(!this._optionTypes, "'optionTypes' is already defined!");
-      assertType(optionTypes, Object);
-      this._optionTypes = optionTypes;
-      this._didBuild.push(function(type) {
-        return type.optionTypes = optionTypes;
-      });
-      if (!this._optionDefaults) {
-        this.createArguments(this.__createOptions);
-      }
-      if (!isDev) {
-        return;
-      }
-      return this._willBuild.push(function() {
-        return this.initArguments(function(args) {
-          assertTypes(args[0], optionTypes);
-          return args;
-        });
-      });
-    }
-  },
-  optionDefaults: {
-    get: function() {
-      return this._optionDefaults;
-    },
-    set: function(optionDefaults) {
-      assert(!this._optionDefaults, "'optionDefaults' is already defined!");
-      assertType(optionDefaults, Object);
-      this._optionDefaults = optionDefaults;
-      this._didBuild.push(function(type) {
-        return type.optionDefaults = optionDefaults;
-      });
-      if (!this._optionTypes) {
-        this.createArguments(this.__createOptions);
-      }
-      return this.initArguments(function(args) {
-        mergeDefaults(args[0], optionDefaults);
         return args;
       });
     }
@@ -215,7 +310,7 @@ define(TypeBuilder.prototype, {
     assertType(func, Function);
     this._getCacheID = func;
     this._didBuild.push(function(type) {
-      return type.cache = Object.create(null);
+      type.cache = Object.create(null);
     });
   },
   returnExisting: function(func) {
@@ -225,13 +320,6 @@ define(TypeBuilder.prototype, {
 });
 
 define(TypeBuilder.prototype, {
-  __createOptions: function(args) {
-    if (args[0] === void 0) {
-      args[0] = {};
-    }
-    assertType(args[0], Object, "options");
-    return args;
-  },
   __buildArgumentCreator: function() {
     var phases;
     phases = this._initArguments;

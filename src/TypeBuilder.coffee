@@ -11,13 +11,17 @@ Property = require "Property"
 Builder = require "Builder"
 setKind = require "setKind"
 setType = require "setType"
+hasKeys = require "hasKeys"
 combine = require "combine"
+isType = require "isType"
 assert = require "assert"
 define = require "define"
 Shape = require "Shape"
 guard = require "guard"
 Null = require "Null"
+Void = require "Void"
 sync = require "sync"
+has = require "has"
 
 TypeRegistry = require "./TypeRegistry"
 
@@ -44,6 +48,8 @@ TypeBuilder.props = Property.Map
 
   _argumentDefaults: null
 
+  _options: null
+
   _optionTypes: null
 
   _optionDefaults: null
@@ -53,6 +59,133 @@ TypeBuilder.props = Property.Map
   _getExisting: null
 
 define TypeBuilder.prototype,
+
+  optionTypes:
+    get: -> @_optionTypes
+    set: (optionTypes) ->
+
+      assert not @_options, "Cannot set 'optionTypes' after calling 'defineOptions'!"
+      assert not @_optionTypes, "'optionTypes' is already defined!"
+
+      assertType optionTypes, Object
+
+      @_optionTypes = optionTypes
+
+      @_didBuild.push (type) ->
+        type.optionTypes = optionTypes
+
+      if not @_optionDefaults
+        @_initArguments.unshift (args) ->
+          args[0] = {} if args[0] is undefined
+          assertType args[0], Object, "options"
+          return args
+
+      return if not isDev
+
+      # Option validation occurs after
+      # the options have been initialized!
+      @_willBuild.push -> @initArguments (args) ->
+        assertTypes args[0], optionTypes
+        return args
+
+  optionDefaults:
+    get: -> @_optionDefaults
+    set: (optionDefaults) ->
+
+      assert not @_options, "Cannot set 'optionDefaults' after calling 'defineOptions'!"
+      assert not @_optionDefaults, "'optionDefaults' is already defined!"
+
+      assertType optionDefaults, Object
+
+      @_optionDefaults = optionDefaults
+
+      @_didBuild.push (type) ->
+        type.optionDefaults = optionDefaults
+
+      if not @_optionTypes
+        @_initArguments.unshift (args) ->
+          args[0] = {} if args[0] is undefined
+          assertType args[0], Object, "options"
+          return args
+
+      # Merging default option values occurs
+      # after the options have been created,
+      # but before the options are validated!
+      @_initArguments.push (args) ->
+        mergeDefaults args[0], optionDefaults
+        return args
+
+  defineOptions: (argIndex, optionConfigs) ->
+
+    assert not @_optionTypes, "Cannot call 'defineOptions' after setting 'optionTypes'!"
+    assert not @_optionDefaults, "Cannot call 'defineOptions' after setting 'optionDefaults'!"
+
+    if arguments.length is 1
+      optionConfigs = argIndex
+      argIndex = 0
+
+    assertType argIndex, Number
+    assertType optionConfigs, Object
+
+    if @_options
+      assert not @_options[argIndex], "Already called 'defineOptions' with an 'argIndex' equal to #{argIndex}!"
+    else @_options = []
+
+    @_options[argIndex] = optionConfigs
+
+    optionTypes = {}
+    optionDefaults = {}
+
+    sync.each optionConfigs, (optionConfig, optionName) ->
+
+      if optionType = optionConfig.type
+
+        if not optionConfig.required
+          optionType = optionType.Maybe or [ optionType, Void ]
+
+        optionTypes[optionName] = optionType
+
+      if has optionConfig, "default"
+        optionDefaults[optionName] = optionConfig.default
+
+    @_didBuild.push (type) ->
+      type.optionTypes = optionTypes if hasKeys optionTypes
+      type.optionDefaults = optionDefaults if hasKeys optionDefaults
+
+    @_initArguments.push (args) ->
+
+      options = args[argIndex]
+
+      if options is undefined
+        args[argIndex] = options = {}
+
+      assertType args[0], Object, "options"
+
+      for optionName, optionConfig of optionConfigs
+
+        option = options[optionName]
+        if option is undefined
+
+          if has optionConfig, "default"
+            options[optionName] = option = optionConfig.default
+
+          else if isType optionConfig.defaults, Object
+
+            if isType option, Object
+              options[optionName] = mergeDefaults option, optionConfig.defaults
+
+            else
+              options[optionName] = optionConfig.defaults
+
+          else if not optionConfig.required
+            continue # Dont validate options that arent required.
+
+        else if isType optionConfig.defaults, Object
+          options[optionName] = mergeDefaults option, optionConfig.defaults
+
+        assertType options[optionName], optionConfig.type, "options." + optionName
+
+      return args
 
   argumentTypes:
     get: -> @_argumentTypes
@@ -71,7 +204,7 @@ define TypeBuilder.prototype,
       @_didBuild.push (type) ->
         type.argumentTypes = argumentTypes
 
-      return unless isDev
+      return if not isDev
 
       if Array.isArray argumentTypes
         keys = argumentTypes.map (_, index) -> "args[#{index}]"
@@ -105,10 +238,12 @@ define TypeBuilder.prototype,
         type.argumentDefaults = argumentDefaults
 
       if Array.isArray argumentDefaults
-        @createArguments (args) ->
+        @_initArguments.unshift (args) ->
           for value, index in argumentDefaults
             continue if args[index] isnt undefined
-            args[index] = value
+            if isConstructor value, Object
+              args[index] = combine args[index], value
+            else args[index] = value
           return args
         return
 
@@ -116,7 +251,7 @@ define TypeBuilder.prototype,
       # after the arguments have been created,
       # but before the arguments are validated!
       argumentNames = Object.keys @_argumentTypes
-      @initArguments (args) ->
+      @_initArguments.push (args) ->
         for name, index in argumentNames
           continue if args[index] isnt undefined
           value = argumentDefaults[name]
@@ -125,53 +260,6 @@ define TypeBuilder.prototype,
           else args[index] = value
         return args
       return
-
-  optionTypes:
-    get: -> @_optionTypes
-    set: (optionTypes) ->
-
-      assert not @_optionTypes, "'optionTypes' is already defined!"
-
-      assertType optionTypes, Object
-
-      @_optionTypes = optionTypes
-
-      @_didBuild.push (type) ->
-        type.optionTypes = optionTypes
-
-      unless @_optionDefaults
-        @createArguments @__createOptions
-
-      return unless isDev
-
-      # Option validation occurs after
-      # the options have been initialized!
-      @_willBuild.push -> @initArguments (args) ->
-        assertTypes args[0], optionTypes
-        return args
-
-  optionDefaults:
-    get: -> @_optionDefaults
-    set: (optionDefaults) ->
-
-      assert not @_optionDefaults, "'optionDefaults' is already defined!"
-
-      assertType optionDefaults, Object
-
-      @_optionDefaults = optionDefaults
-
-      @_didBuild.push (type) ->
-        type.optionDefaults = optionDefaults
-
-      unless @_optionTypes
-        @createArguments @__createOptions
-
-      # Merging default option values occurs
-      # after the options have been created,
-      # but before the options are validated!
-      @initArguments (args) ->
-        mergeDefaults args[0], optionDefaults
-        return args
 
   createArguments: (func) ->
     assertType func, Function
@@ -190,6 +278,7 @@ define TypeBuilder.prototype,
     @_getCacheID = func
     @_didBuild.push (type) ->
       type.cache = Object.create null
+      return
     return
 
   returnExisting: (func) ->
@@ -198,11 +287,6 @@ define TypeBuilder.prototype,
     return
 
 define TypeBuilder.prototype,
-
-  __createOptions: (args) ->
-    args[0] = {} if args[0] is undefined
-    assertType args[0], Object, "options"
-    return args
 
   __buildArgumentCreator: ->
 
