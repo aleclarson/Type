@@ -138,21 +138,37 @@ define TypeBuilder.prototype,
 
     sync.each optionConfigs, (optionConfig, optionName) ->
 
+      # Support { key: type }
+      if not isType optionConfig, Object
+        optionTypes[optionName] = optionConfig
+        return
+
+      # Support { key: { default: value } }
+      if has optionConfig, "default"
+        optionDefaults[optionName] = optionConfig.default
+
+      # Support { key: { defaults: values } }
+      else if has optionConfig, "defaults"
+        optionDefaults[optionName] = optionConfig.defaults
+
+      # Support { key: { type: func } }
       if optionType = optionConfig.type
 
+        # Support { key: { required: bool } }
         if not optionConfig.required
-          optionType = optionType.Maybe or [ optionType, Void ]
+          if Array.isArray optionType
+            optionType = optionType.concat Void
+          else optionType = optionType.Maybe or [ optionType, Void ]
 
         optionTypes[optionName] = optionType
 
-      if has optionConfig, "default"
-        optionDefaults[optionName] = optionConfig.default
+      return
 
     @_didBuild.push (type) ->
       type.optionTypes = optionTypes if hasKeys optionTypes
       type.optionDefaults = optionDefaults if hasKeys optionDefaults
 
-    @_initArguments.push (args) ->
+    createOptions = (args) ->
 
       options = args[argIndex]
 
@@ -164,28 +180,29 @@ define TypeBuilder.prototype,
       for optionName, optionConfig of optionConfigs
 
         option = options[optionName]
-        if option is undefined
+
+        if isType optionConfig.defaults, Object
+          options[optionName] = option = {} if not isType option, Object
+          mergeDefaults option, optionConfig.defaults
+
+        else if option is undefined
 
           if has optionConfig, "default"
             options[optionName] = option = optionConfig.default
 
-          else if isType optionConfig.defaults, Object
-
-            if isType option, Object
-              options[optionName] = mergeDefaults option, optionConfig.defaults
-
-            else
-              options[optionName] = optionConfig.defaults
-
           else if not optionConfig.required
             continue # Dont validate options that arent required.
 
-        else if isType optionConfig.defaults, Object
-          options[optionName] = mergeDefaults option, optionConfig.defaults
+        optionType = optionTypes[optionName]
+        continue if not optionType
 
-        assertType options[optionName], optionConfig.type, "options." + optionName
+        if isType optionType, Object
+          assertTypes option, optionType, "options." + optionName
+        else assertType option, optionType, "options." + optionName
 
       return args
+
+    @_initArguments.push createOptions
 
   argumentTypes:
     get: -> @_argumentTypes

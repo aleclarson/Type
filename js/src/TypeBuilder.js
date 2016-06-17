@@ -133,7 +133,7 @@ define(TypeBuilder.prototype, {
     }
   },
   defineOptions: function(argIndex, optionConfigs) {
-    var optionDefaults, optionTypes;
+    var createOptions, optionDefaults, optionTypes;
     assert(!this._optionTypes, "Cannot call 'defineOptions' after setting 'optionTypes'!");
     assert(!this._optionDefaults, "Cannot call 'defineOptions' after setting 'optionDefaults'!");
     if (arguments.length === 1) {
@@ -152,14 +152,24 @@ define(TypeBuilder.prototype, {
     optionDefaults = {};
     sync.each(optionConfigs, function(optionConfig, optionName) {
       var optionType;
-      if (optionType = optionConfig.type) {
-        if (!optionConfig.required) {
-          optionType = optionType.Maybe || [optionType, Void];
-        }
-        optionTypes[optionName] = optionType;
+      if (!isType(optionConfig, Object)) {
+        optionTypes[optionName] = optionConfig;
+        return;
       }
       if (has(optionConfig, "default")) {
-        return optionDefaults[optionName] = optionConfig["default"];
+        optionDefaults[optionName] = optionConfig["default"];
+      } else if (has(optionConfig, "defaults")) {
+        optionDefaults[optionName] = optionConfig.defaults;
+      }
+      if (optionType = optionConfig.type) {
+        if (!optionConfig.required) {
+          if (Array.isArray(optionType)) {
+            optionType = optionType.concat(Void);
+          } else {
+            optionType = optionType.Maybe || [optionType, Void];
+          }
+        }
+        optionTypes[optionName] = optionType;
       }
     });
     this._didBuild.push(function(type) {
@@ -170,8 +180,8 @@ define(TypeBuilder.prototype, {
         return type.optionDefaults = optionDefaults;
       }
     });
-    return this._initArguments.push(function(args) {
-      var option, optionConfig, optionName, options;
+    createOptions = function(args) {
+      var option, optionConfig, optionName, optionType, options;
       options = args[argIndex];
       if (options === void 0) {
         args[argIndex] = options = {};
@@ -180,25 +190,31 @@ define(TypeBuilder.prototype, {
       for (optionName in optionConfigs) {
         optionConfig = optionConfigs[optionName];
         option = options[optionName];
-        if (option === void 0) {
+        if (isType(optionConfig.defaults, Object)) {
+          if (!isType(option, Object)) {
+            options[optionName] = option = {};
+          }
+          mergeDefaults(option, optionConfig.defaults);
+        } else if (option === void 0) {
           if (has(optionConfig, "default")) {
             options[optionName] = option = optionConfig["default"];
-          } else if (isType(optionConfig.merge, Object)) {
-            if (isType(option, Object)) {
-              options[optionName] = combine(option, optionConfig.merge);
-            } else {
-              options[optionName] = optionConfig.merge;
-            }
           } else if (!optionConfig.required) {
             continue;
           }
-        } else if (isType(optionConfig.merge, Object)) {
-          options[optionName] = option = combine({}, optionConfig["default"], option);
         }
-        assertType(option, optionConfig.type, "options." + optionName);
+        optionType = optionTypes[optionName];
+        if (!optionType) {
+          continue;
+        }
+        if (isType(optionType, Object)) {
+          assertTypes(option, optionType, "options." + optionName);
+        } else {
+          assertType(option, optionType, "options." + optionName);
+        }
       }
       return args;
-    });
+    };
+    return this._initArguments.push(createOptions);
   },
   argumentTypes: {
     get: function() {
