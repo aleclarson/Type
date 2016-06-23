@@ -1,6 +1,4 @@
-var Builder, NamedFunction, Null, Property, Shape, TypeBuilder, TypeRegistry, Void, assert, assertType, assertTypes, combine, define, emptyFunction, guard, has, hasKeys, isConstructor, isType, mergeDefaults, setKind, setType, sync, throwFailure;
-
-throwFailure = require("failure").throwFailure;
+var Builder, NamedFunction, Null, Property, Shape, TypeBuilder, TypeRegistry, Void, assert, assertType, assertTypes, combine, define, emptyFunction, guard, has, hasKeys, isConstructor, isType, mergeDefaults, setKind, setType, sync;
 
 NamedFunction = require("NamedFunction");
 

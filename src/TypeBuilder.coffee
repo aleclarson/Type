@@ -1,6 +1,4 @@
 
-{ throwFailure } = require "failure"
-
 NamedFunction = require "NamedFunction"
 emptyFunction = require "emptyFunction"
 mergeDefaults = require "mergeDefaults"

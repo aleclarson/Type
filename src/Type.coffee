@@ -1,6 +1,7 @@
 
 NamedFunction = require "NamedFunction"
 assertType = require "assertType"
+Property = require "Property"
 Builder = require "Builder"
 setKind = require "setKind"
 setType = require "setType"
@@ -17,7 +18,7 @@ Type = NamedFunction "Type", (name, func) ->
   self._tracer = Tracer "Type()", skip: 1
 
   self.didBuild (type) ->
-    Type.augment type
+    Type.augment type, yes
 
   return self
 
@@ -28,16 +29,22 @@ define Type,
   Builder: require "./TypeBuilder"
 
   augment: (type, inheritable) ->
-    type.Maybe = Maybe type
-    type.Kind = Kind type if inheritable isnt no
-    setType type, Type
+
+    prop = Property { frozen: yes, enumerable: no }
+
+    prop.define type, "Maybe", Maybe type
+
+    if inheritable
+      prop.define type, "Kind", Kind type
+
+    return setType type, Type
 
 #
 # Builtin Types
 #
 
 for type in [ Number, String, Boolean, Symbol, Array, Date, RegExp ]
-  Type.augment type, no
+  Type.augment type
 
 for type in [ Object, Function, Error, Type, Type.Builder, Builder ]
-  Type.augment type
+  Type.augment type, yes
