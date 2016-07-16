@@ -1,4 +1,4 @@
-var Builder, NamedFunction, Null, Property, Shape, TypeBuilder, TypeRegistry, Void, assert, assertType, assertTypes, combine, define, emptyFunction, guard, has, hasKeys, isConstructor, isType, mergeDefaults, setKind, setType, sync;
+var Builder, NamedFunction, Null, Property, Shape, TypeBuilder, Void, assert, assertType, assertTypes, combine, define, emptyFunction, gatherTypeNames, guard, has, hasKeys, isConstructor, isType, mergeDefaults, overrideObjectToString, setKind, setType, sync;
 
 NamedFunction = require("NamedFunction");
 
@@ -42,20 +42,15 @@ sync = require("sync");
 
 has = require("has");
 
-TypeRegistry = require("./TypeRegistry");
-
-module.exports = TypeBuilder = NamedFunction("TypeBuilder", function(name, func) {
+TypeBuilder = NamedFunction("TypeBuilder", function(name, func) {
   var self;
   self = Builder(name, func);
   setType(self, TypeBuilder);
-  if (name) {
-    TypeRegistry.register(name, self);
-  }
   TypeBuilder.props.define(self, arguments);
   return self;
 });
 
-setKind(TypeBuilder, Builder);
+module.exports = setKind(TypeBuilder, Builder);
 
 TypeBuilder.props = Property.Map({
   _initArguments: function() {
@@ -81,7 +76,8 @@ define(TypeBuilder.prototype, {
       assertType(optionTypes, Object);
       this._optionTypes = optionTypes;
       this._didBuild.push(function(type) {
-        return type.optionTypes = optionTypes;
+        type.optionTypes = optionTypes;
+        return overrideObjectToString(optionTypes, gatherTypeNames);
       });
       if (!this._optionDefaults) {
         this._initArguments.unshift(function(args) {
@@ -173,6 +169,7 @@ define(TypeBuilder.prototype, {
     this._didBuild.push(function(type) {
       if (hasKeys(optionTypes)) {
         type.optionTypes = optionTypes;
+        overrideObjectToString(optionTypes, gatherTypeNames);
       }
       if (hasKeys(optionDefaults)) {
         return type.optionDefaults = optionDefaults;
@@ -230,7 +227,8 @@ define(TypeBuilder.prototype, {
       });
       this._argumentTypes = argumentTypes;
       this._didBuild.push(function(type) {
-        return type.argumentTypes = argumentTypes;
+        type.argumentTypes = argumentTypes;
+        return overrideObjectToString(argumentTypes, gatherTypeNames);
       });
       if (!isDev) {
         return;
@@ -392,4 +390,25 @@ define(TypeBuilder.prototype, {
   }
 });
 
-//# sourceMappingURL=../../map/src/TypeBuilder.map
+overrideObjectToString = function(obj, transform) {
+  return Object.defineProperty(obj, "toString", {
+    value: function() {
+      return log._format(transform(obj), {
+        unlimited: true,
+        colors: false
+      });
+    }
+  });
+};
+
+gatherTypeNames = function(type) {
+  if (isType(type, Object)) {
+    return sync.map(type, gatherTypeNames);
+  }
+  if (type.getName) {
+    return type.getName();
+  }
+  return type.name;
+};
+
+//# sourceMappingURL=map/TypeBuilder.map

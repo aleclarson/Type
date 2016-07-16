@@ -1,4 +1,4 @@
-var Builder, Kind, Maybe, NamedFunction, Property, Tracer, Type, assertType, define, i, j, len, len1, ref, ref1, setKind, setType, type;
+var Builder, Kind, Maybe, NamedFunction, Property, Tracer, Type, assertType, define, setKind, setType;
 
 NamedFunction = require("NamedFunction");
 
@@ -20,7 +20,7 @@ Maybe = require("Maybe");
 
 Kind = require("Kind");
 
-module.exports = Type = NamedFunction("Type", function(name, func) {
+Type = NamedFunction("Type", function(name, func) {
   var self;
   self = Type.Builder(name, func);
   self._tracer = Tracer("Type()", {
@@ -32,7 +32,24 @@ module.exports = Type = NamedFunction("Type", function(name, func) {
   return self;
 });
 
-setKind(Type, Function);
+module.exports = setKind(Type, Function);
+
+define(Type.prototype, {
+  isRequired: {
+    get: function() {
+      return {
+        type: this,
+        required: true
+      };
+    }
+  },
+  withDefault: function(value) {
+    return {
+      type: this,
+      "default": value
+    };
+  }
+});
 
 define(Type, {
   Builder: require("./TypeBuilder"),
@@ -50,16 +67,12 @@ define(Type, {
   }
 });
 
-ref = [Number, String, Boolean, Symbol, Array, Date, RegExp];
-for (i = 0, len = ref.length; i < len; i++) {
-  type = ref[i];
-  Type.augment(type);
-}
+[Array, Boolean, Date, Number, RegExp, String, Symbol].forEach(function(type) {
+  return Type.augment(type);
+});
 
-ref1 = [Object, Function, Error, Type, Type.Builder, Builder];
-for (j = 0, len1 = ref1.length; j < len1; j++) {
-  type = ref1[j];
-  Type.augment(type, true);
-}
+[Object, Function, Error, Type, Type.Builder, Builder].forEach(function(type) {
+  return Type.augment(type, true);
+});
 
-//# sourceMappingURL=../../map/src/Type.map
+//# sourceMappingURL=map/Type.map

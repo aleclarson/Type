@@ -10,7 +10,6 @@ define = require "define"
 Maybe = require "Maybe"
 Kind = require "Kind"
 
-module.exports =
 Type = NamedFunction "Type", (name, func) ->
 
   self = Type.Builder name, func
@@ -22,7 +21,15 @@ Type = NamedFunction "Type", (name, func) ->
 
   return self
 
-setKind Type, Function
+module.exports = setKind Type, Function
+
+define Type.prototype,
+
+  isRequired: get: ->
+    { type: this, required: yes }
+
+  withDefault: (value) ->
+    { type: this, default: value }
 
 define Type,
 
@@ -43,8 +50,21 @@ define Type,
 # Builtin Types
 #
 
-for type in [ Number, String, Boolean, Symbol, Array, Date, RegExp ]
+[ Array
+  Boolean
+  Date
+  Number
+  RegExp
+  String
+  Symbol
+].forEach (type) ->
   Type.augment type
 
-for type in [ Object, Function, Error, Type, Type.Builder, Builder ]
+[ Object
+  Function
+  Error
+  Type
+  Type.Builder
+  Builder
+].forEach (type) ->
   Type.augment type, yes

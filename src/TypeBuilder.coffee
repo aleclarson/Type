@@ -21,22 +21,13 @@ Void = require "Void"
 sync = require "sync"
 has = require "has"
 
-TypeRegistry = require "./TypeRegistry"
-
-module.exports =
 TypeBuilder = NamedFunction "TypeBuilder", (name, func) ->
-
   self = Builder name, func
-
   setType self, TypeBuilder
-
-  TypeRegistry.register name, self if name
-
   TypeBuilder.props.define self, arguments
-
   return self
 
-setKind TypeBuilder, Builder
+module.exports = setKind TypeBuilder, Builder
 
 TypeBuilder.props = Property.Map
 
@@ -71,6 +62,7 @@ define TypeBuilder.prototype,
 
       @_didBuild.push (type) ->
         type.optionTypes = optionTypes
+        overrideObjectToString optionTypes, gatherTypeNames
 
       if not @_optionDefaults
         @_initArguments.unshift (args) ->
@@ -163,8 +155,13 @@ define TypeBuilder.prototype,
       return
 
     @_didBuild.push (type) ->
-      type.optionTypes = optionTypes if hasKeys optionTypes
-      type.optionDefaults = optionDefaults if hasKeys optionDefaults
+
+      if hasKeys optionTypes
+        type.optionTypes = optionTypes
+        overrideObjectToString optionTypes, gatherTypeNames
+
+      if hasKeys optionDefaults
+        type.optionDefaults = optionDefaults
 
     createOptions = (args) ->
 
@@ -218,6 +215,7 @@ define TypeBuilder.prototype,
 
       @_didBuild.push (type) ->
         type.argumentTypes = argumentTypes
+        overrideObjectToString argumentTypes, gatherTypeNames
 
       return if not isDev
 
@@ -339,3 +337,17 @@ define TypeBuilder.prototype,
         return createInstance type, args
 
     return createInstance
+
+overrideObjectToString = (obj, transform) ->
+  Object.defineProperty obj, "toString",
+    value: -> log._format transform(obj), { unlimited: yes, colors: no }
+
+gatherTypeNames = (type) ->
+
+  if isType type, Object
+    return sync.map type, gatherTypeNames
+
+  if type.getName
+    return type.getName()
+
+  return type.name

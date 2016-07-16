@@ -1,7 +1,7 @@
 {
   "name": "Type",
   "version": "1.0.0",
-  "main": "./js/src/Type",
+  "main": "js/Type",
   "dependencies": {
     "Builder": "aleclarson/Builder#1.0.0",
     "Kind": "aleclarson/Kind#1.0.0",
