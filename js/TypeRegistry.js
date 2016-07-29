@@ -32,4 +32,4 @@ module.exports = {
   }
 };
 
-//# sourceMappingURL=../../map/src/TypeRegistry.map
+//# sourceMappingURL=map/TypeRegistry.map

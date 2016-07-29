@@ -1,4 +1,6 @@
 
+require "isDev"
+
 NamedFunction = require "NamedFunction"
 assertType = require "assertType"
 Property = require "Property"
@@ -10,19 +12,21 @@ define = require "define"
 Maybe = require "Maybe"
 Kind = require "Kind"
 
-module.exports =
 Type = NamedFunction "Type", (name, func) ->
-
   self = Type.Builder name, func
-
-  self._tracer = Tracer "Type()", skip: 1
-
-  self.didBuild (type) ->
-    Type.augment type, yes
-
+  isDev and self._tracer = Tracer "Type()", skip: 1
+  self.didBuild (type) -> Type.augment type, yes
   return self
 
-setKind Type, Function
+module.exports = setKind Type, Function
+
+define Type.prototype,
+
+  isRequired: get: ->
+    { type: this, required: yes }
+
+  withDefault: (value) ->
+    { type: this, default: value }
 
 define Type,
 
@@ -32,10 +36,10 @@ define Type,
 
     prop = Property { frozen: yes, enumerable: no }
 
-    prop.define type, "Maybe", Maybe type
+    prop.define type, "Maybe", { value: Maybe type }
 
     if inheritable
-      prop.define type, "Kind", Kind type
+      prop.define type, "Kind", { value: Kind type }
 
     return setType type, Type
 
@@ -43,8 +47,21 @@ define Type,
 # Builtin Types
 #
 
-for type in [ Number, String, Boolean, Symbol, Array, Date, RegExp ]
+[ Array
+  Boolean
+  Date
+  Number
+  RegExp
+  String
+  Symbol
+].forEach (type) ->
   Type.augment type
 
-for type in [ Object, Function, Error, Type, Type.Builder, Builder ]
+[ Object
+  Function
+  Error
+  Type
+  Type.Builder
+  Builder
+].forEach (type) ->
   Type.augment type, yes

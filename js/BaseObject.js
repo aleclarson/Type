@@ -61,4 +61,4 @@ props = {
   })
 };
 
-//# sourceMappingURL=../../map/src/BaseObject.map
+//# sourceMappingURL=map/BaseObject.map
