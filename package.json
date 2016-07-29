@@ -5,7 +5,7 @@
   "dependencies": {
     "Builder": "aleclarson/Builder#1.1.0",
     "Kind": "aleclarson/Kind#1.0.0",
-    "Maybe": "aleclarson/Maybe#1.0.0",
+    "Maybe": "aleclarson/Maybe#1.0.1",
     "NamedFunction": "aleclarson/NamedFunction#2.0.0",
     "Null": "aleclarson/Null#1.0.0",
     "Property": "aleclarson/Property#1.1.1",
