@@ -71,6 +71,7 @@ define(TypeBuilder.prototype, {
       return this._optionTypes;
     },
     set: function(optionTypes) {
+      console.warn("DEPRECATED: (" + this._name + ") Use 'defineOptions' instead of 'optionTypes'!");
       assert(!this._options, "Cannot set 'optionTypes' after calling 'defineOptions'!");
       assert(!this._optionTypes, "'optionTypes' is already defined!");
       assertType(optionTypes, Object);
@@ -104,6 +105,7 @@ define(TypeBuilder.prototype, {
       return this._optionDefaults;
     },
     set: function(optionDefaults) {
+      console.warn("DEPRECATED: (" + this._name + ") Use 'defineOptions' instead of 'optionDefaults'!");
       assert(!this._options, "Cannot set 'optionDefaults' after calling 'defineOptions'!");
       assert(!this._optionDefaults, "'optionDefaults' is already defined!");
       assertType(optionDefaults, Object);
@@ -181,11 +183,14 @@ define(TypeBuilder.prototype, {
       if (options === void 0) {
         args[argIndex] = options = {};
       }
-      assertType(args[0], Object, "options");
+      assertType(options, Object, "options");
       for (optionName in optionConfigs) {
         optionConfig = optionConfigs[optionName];
+        if (!optionConfig) {
+          debugger;
+        }
         option = options[optionName];
-        if (isType(optionConfig.defaults, Object)) {
+        if (optionConfig.defaults) {
           if (!isType(option, Object)) {
             options[optionName] = option = {};
           }

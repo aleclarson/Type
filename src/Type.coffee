@@ -1,4 +1,6 @@
 
+require "isDev"
+
 NamedFunction = require "NamedFunction"
 assertType = require "assertType"
 Property = require "Property"
@@ -11,14 +13,9 @@ Maybe = require "Maybe"
 Kind = require "Kind"
 
 Type = NamedFunction "Type", (name, func) ->
-
   self = Type.Builder name, func
-
-  self._tracer = Tracer "Type()", skip: 1
-
-  self.didBuild (type) ->
-    Type.augment type, yes
-
+  isDev and self._tracer = Tracer "Type()", skip: 1
+  self.didBuild (type) -> Type.augment type, yes
   return self
 
 module.exports = setKind Type, Function
@@ -39,10 +36,10 @@ define Type,
 
     prop = Property { frozen: yes, enumerable: no }
 
-    prop.define type, "Maybe", Maybe type
+    prop.define type, "Maybe", { value: Maybe type }
 
     if inheritable
-      prop.define type, "Kind", Kind type
+      prop.define type, "Kind", { value: Kind type }
 
     return setType type, Type
 

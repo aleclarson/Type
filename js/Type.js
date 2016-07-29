@@ -1,5 +1,7 @@
 var Builder, Kind, Maybe, NamedFunction, Property, Tracer, Type, assertType, define, setKind, setType;
 
+require("isDev");
+
 NamedFunction = require("NamedFunction");
 
 assertType = require("assertType");
@@ -23,9 +25,9 @@ Kind = require("Kind");
 Type = NamedFunction("Type", function(name, func) {
   var self;
   self = Type.Builder(name, func);
-  self._tracer = Tracer("Type()", {
+  isDev && (self._tracer = Tracer("Type()", {
     skip: 1
-  });
+  }));
   self.didBuild(function(type) {
     return Type.augment(type, true);
   });
@@ -59,9 +61,13 @@ define(Type, {
       frozen: true,
       enumerable: false
     });
-    prop.define(type, "Maybe", Maybe(type));
+    prop.define(type, "Maybe", {
+      value: Maybe(type)
+    });
     if (inheritable) {
-      prop.define(type, "Kind", Kind(type));
+      prop.define(type, "Kind", {
+        value: Kind(type)
+      });
     }
     return setType(type, Type);
   }

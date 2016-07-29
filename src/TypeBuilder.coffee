@@ -53,6 +53,8 @@ define TypeBuilder.prototype,
     get: -> @_optionTypes
     set: (optionTypes) ->
 
+      console.warn "DEPRECATED: (#{@_name}) Use 'defineOptions' instead of 'optionTypes'!"
+
       assert not @_options, "Cannot set 'optionTypes' after calling 'defineOptions'!"
       assert not @_optionTypes, "'optionTypes' is already defined!"
 
@@ -81,6 +83,8 @@ define TypeBuilder.prototype,
   optionDefaults:
     get: -> @_optionDefaults
     set: (optionDefaults) ->
+
+      console.warn "DEPRECATED: (#{@_name}) Use 'defineOptions' instead of 'optionDefaults'!"
 
       assert not @_options, "Cannot set 'optionDefaults' after calling 'defineOptions'!"
       assert not @_optionDefaults, "'optionDefaults' is already defined!"
@@ -170,14 +174,19 @@ define TypeBuilder.prototype,
       if options is undefined
         args[argIndex] = options = {}
 
-      assertType args[0], Object, "options"
+      assertType options, Object, "options"
 
       for optionName, optionConfig of optionConfigs
 
+        debugger if not optionConfig
+
         option = options[optionName]
 
-        if isType optionConfig.defaults, Object
-          options[optionName] = option = {} if not isType option, Object
+        if optionConfig.defaults
+
+          if not isType option, Object
+            options[optionName] = option = {}
+
           mergeDefaults option, optionConfig.defaults
 
         else if option is undefined
