@@ -2,7 +2,10 @@
 require "isDev"
 
 NamedFunction = require "NamedFunction"
+formatType = require "formatType"
 assertType = require "assertType"
+sliceArray = require "sliceArray"
+Validator = require "Validator"
 Property = require "Property"
 Builder = require "Builder"
 setKind = require "setKind"
@@ -12,6 +15,8 @@ define = require "define"
 Maybe = require "Maybe"
 Kind = require "Kind"
 
+TypeTuple = require "./TypeTuple"
+
 Type = NamedFunction "Type", (name, func) ->
   self = Type.Builder name, func
   isDev and self._tracer = Tracer "Type()", skip: 1
@@ -20,17 +25,26 @@ Type = NamedFunction "Type", (name, func) ->
 
 module.exports = setKind Type, Function
 
-define Type.prototype,
+define Type::,
+
+  or: Validator::or = ->
+    types = sliceArray arguments
+    types.unshift this
+    return TypeTuple types
 
   isRequired: get: ->
-    { type: this, required: yes }
+    type: this
+    required: yes
 
   withDefault: (value) ->
-    { type: this, default: value }
+    type: this
+    default: value
 
 define Type,
 
   Builder: require "./TypeBuilder"
+
+  Tuple: TypeTuple
 
   augment: (type, inheritable) ->
 

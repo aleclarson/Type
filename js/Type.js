@@ -1,10 +1,16 @@
-var Builder, Kind, Maybe, NamedFunction, Property, Tracer, Type, assertType, define, setKind, setType;
+var Builder, Kind, Maybe, NamedFunction, Property, Tracer, Type, TypeTuple, Validator, assertType, define, formatType, setKind, setType, sliceArray;
 
 require("isDev");
 
 NamedFunction = require("NamedFunction");
 
+formatType = require("formatType");
+
 assertType = require("assertType");
+
+sliceArray = require("sliceArray");
+
+Validator = require("Validator");
 
 Property = require("Property");
 
@@ -22,6 +28,8 @@ Maybe = require("Maybe");
 
 Kind = require("Kind");
 
+TypeTuple = require("./TypeTuple");
+
 Type = NamedFunction("Type", function(name, func) {
   var self;
   self = Type.Builder(name, func);
@@ -37,6 +45,12 @@ Type = NamedFunction("Type", function(name, func) {
 module.exports = setKind(Type, Function);
 
 define(Type.prototype, {
+  or: Validator.prototype.or = function() {
+    var types;
+    types = sliceArray(arguments);
+    types.unshift(this);
+    return TypeTuple(types);
+  },
   isRequired: {
     get: function() {
       return {
@@ -55,6 +69,7 @@ define(Type.prototype, {
 
 define(Type, {
   Builder: require("./TypeBuilder"),
+  Tuple: TypeTuple,
   augment: function(type, inheritable) {
     var prop;
     prop = Property({
