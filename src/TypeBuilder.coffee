@@ -5,6 +5,7 @@ mergeDefaults = require "mergeDefaults"
 isConstructor = require "isConstructor"
 assertTypes = require "assertTypes"
 assertType = require "assertType"
+sliceArray = require "sliceArray"
 Property = require "Property"
 Builder = require "Builder"
 setKind = require "setKind"
@@ -12,13 +13,10 @@ setType = require "setType"
 hasKeys = require "hasKeys"
 combine = require "combine"
 isType = require "isType"
-assert = require "assert"
 define = require "define"
 Shape = require "Shape"
-guard = require "guard"
-Null = require "Null"
-Void = require "Void"
 sync = require "sync"
+bind = require "bind"
 has = require "has"
 
 TypeBuilder = NamedFunction "TypeBuilder", (name, func) ->
@@ -31,17 +29,11 @@ module.exports = setKind TypeBuilder, Builder
 
 TypeBuilder.props = Property.Map
 
-  _initArguments: -> []
+  _argPhases: -> []
 
-  _argumentTypes: null
-
-  _argumentDefaults: null
-
-  _options: null
+  _argTypes: null
 
   _optionTypes: null
-
-  _optionDefaults: null
 
   _getCacheID: null
 
@@ -49,256 +41,132 @@ TypeBuilder.props = Property.Map
 
 define TypeBuilder.prototype,
 
-  optionTypes:
-    get: -> @_optionTypes
-    set: (optionTypes) ->
+  defineArgs: (args) ->
+    assertType args, Object
 
-      console.warn "DEPRECATED: (#{@_name}) Use 'defineOptions' instead of 'optionTypes'!"
+    if @_argTypes
+      throw Error "'defineArgs' must only be called once!"
 
-      assert not @_options, "Cannot set 'optionTypes' after calling 'defineOptions'!"
-      assert not @_optionTypes, "'optionTypes' is already defined!"
+    argNames = []
+    argTypes = {}
+    argDefaults = {}
+    requiredTypes = {}
 
-      assertType optionTypes, Object
+    sync.each args, (arg, name) ->
+      argNames.push name
+      if not isType arg, Object
+        argTypes[name] = arg
+        return
+      if has arg, "default"
+        argDefaults[name] = arg.default
+      if argType = arg.type
+        if isType argType, Object
+          argType = Shape argType
+        if arg.required
+          requiredTypes[name] = yes
+        argTypes[name] = argType
 
-      @_optionTypes = optionTypes
+    validateArgs = (args) ->
+      for name, index in argNames
+        arg = args[index]
+        if arg is undefined
+          if argDefaults[name] isnt undefined
+            args[index] = arg = argDefaults[name]
+          else if not requiredTypes[name]
+            continue
+        if isDev
+          argType = argTypes[name]
+          argType and assertType arg, argType, "args[#{index}]"
+      return args
 
-      @_didBuild.push (type) ->
-        type.optionTypes = optionTypes
-        overrideObjectToString optionTypes, gatherTypeNames
+    @_argTypes = argTypes
+    @_argPhases.push validateArgs
+    @didBuild (type) ->
+      if hasKeys argTypes
+        type.argTypes = argTypes
+        overrideObjectToString argTypes, gatherTypeNames
+      if hasKeys argDefaults
+        type.argDefaults = argDefaults
+    return
 
-      if not @_optionDefaults
-        @_initArguments.unshift (args) ->
-          args[0] = {} if args[0] is undefined
-          assertType args[0], Object, "options"
-          return args
+  initArgs: (func) ->
+    assertType func, Function
 
-      return if not isDev
+    initArgs = (args) ->
+      func.call null, args
+      return args
 
-      # Option validation occurs after
-      # the options have been initialized!
-      @_willBuild.push -> @initArguments (args) ->
-        assertTypes args[0], optionTypes
-        return args
+    isDev and initArgs = bind.toString func, initArgs
+    @_argPhases.push initArgs
+    return
 
-  optionDefaults:
-    get: -> @_optionDefaults
-    set: (optionDefaults) ->
+  replaceArgs: (func) ->
+    assertType func, Function
 
-      console.warn "DEPRECATED: (#{@_name}) Use 'defineOptions' instead of 'optionDefaults'!"
+    replaceArgs = (args) ->
+      args = func.call null, args
+      return args if args and args.length
+      throw TypeError "Must return an array-like object!"
 
-      assert not @_options, "Cannot set 'optionDefaults' after calling 'defineOptions'!"
-      assert not @_optionDefaults, "'optionDefaults' is already defined!"
+    isDev and replaceArgs = bind.toString func, replaceArgs
+    @_argPhases.push replaceArgs
+    return
 
-      assertType optionDefaults, Object
+  defineOptions: (options) ->
+    assertType options, Object
 
-      @_optionDefaults = optionDefaults
+    if @_optionTypes
+      throw Error "'defineOptions' must only be called once!"
 
-      @_didBuild.push (type) ->
-        type.optionDefaults = optionDefaults
-
-      if not @_optionTypes
-        @_initArguments.unshift (args) ->
-          args[0] = {} if args[0] is undefined
-          assertType args[0], Object, "options"
-          return args
-
-      # Merging default option values occurs
-      # after the options have been created,
-      # but before the options are validated!
-      @_initArguments.push (args) ->
-        mergeDefaults args[0], optionDefaults
-        return args
-
-  defineOptions: (argIndex, optionConfigs) ->
-
-    assert not @_optionTypes, "Cannot call 'defineOptions' after setting 'optionTypes'!"
-    assert not @_optionDefaults, "Cannot call 'defineOptions' after setting 'optionDefaults'!"
-
-    if arguments.length is 1
-      optionConfigs = argIndex
-      argIndex = 0
-
-    assertType argIndex, Number
-    assertType optionConfigs, Object
-
-    if @_options
-      assert not @_options[argIndex], "Already called 'defineOptions' with an 'argIndex' equal to #{argIndex}!"
-    else @_options = []
-
-    @_options[argIndex] = optionConfigs
-
+    optionNames = []
     optionTypes = {}
     optionDefaults = {}
+    requiredTypes = {}
 
-    sync.each optionConfigs, (optionConfig, optionName) ->
-
-      # Support { key: type }
-      if not isType optionConfig, Object
-        optionTypes[optionName] = optionConfig
+    sync.each options, (option, name) ->
+      optionNames.push name
+      if not isType option, Object
+        optionTypes[name] = option
         return
+      if has option, "default"
+        optionDefaults[name] = option.default
+      if optionType = option.type
+        if isType optionType, Object
+          optionType = Shape optionType
+        if option.required
+          requiredTypes[name] = yes
+        optionTypes[name] = optionType
 
-      # Support { key: { default: value } }
-      if has optionConfig, "default"
-        optionDefaults[optionName] = optionConfig.default
+    validateOptions = (args) ->
+      options = args[0]
+      options or args[0] = options = {}
+      assertType options, Object, "options"
+      for name in optionNames
+        option = options[name]
+        if option is undefined
+          if optionDefaults[name] isnt undefined
+            options[name] = option = optionDefaults[name]
+          else if not requiredTypes[name]
+            continue
+        if isDev
+          optionType = optionTypes[name]
+          optionType and assertType option, optionType, "options." + name
+      return args
 
-      # Support { key: { defaults: values } }
-      else if has optionConfig, "defaults"
-        optionDefaults[optionName] = optionConfig.defaults
-
-      # Support { key: { type: func } }
-      if optionType = optionConfig.type
-
-        # Support { key: { required: bool } }
-        if not optionConfig.required
-          if Array.isArray optionType
-            optionType = optionType.concat Void
-          else optionType = optionType.Maybe or [ optionType, Void ]
-
-        optionTypes[optionName] = optionType
-
-      return
-
-    @_didBuild.push (type) ->
-
+    @_optionTypes = optionTypes
+    @_argPhases.push validateOptions
+    @didBuild (type) ->
       if hasKeys optionTypes
         type.optionTypes = optionTypes
         overrideObjectToString optionTypes, gatherTypeNames
-
       if hasKeys optionDefaults
         type.optionDefaults = optionDefaults
-
-    createOptions = (args) ->
-
-      options = args[argIndex]
-
-      if options is undefined
-        args[argIndex] = options = {}
-
-      assertType options, Object, "options"
-
-      for optionName, optionConfig of optionConfigs
-
-        debugger if not optionConfig
-
-        option = options[optionName]
-
-        if optionConfig.defaults
-
-          if not isType option, Object
-            options[optionName] = option = {}
-
-          mergeDefaults option, optionConfig.defaults
-
-        else if option is undefined
-
-          if has optionConfig, "default"
-            options[optionName] = option = optionConfig.default
-
-          else if not optionConfig.required
-            continue # Dont validate options that arent required.
-
-        optionType = optionTypes[optionName]
-        continue if not optionType
-
-        if isType optionType, Object
-          assertTypes option, optionType, "options." + optionName
-        else assertType option, optionType, "options." + optionName
-
-      return args
-
-    @_initArguments.push createOptions
-
-  argumentTypes:
-    get: -> @_argumentTypes
-    set: (argumentTypes) ->
-
-      assert not @_argumentTypes, "'argumentTypes' is already defined!"
-
-      assertType argumentTypes, [ Array, Object ]
-
-      argumentTypes = sync.map argumentTypes, (type) ->
-        return type if not isConstructor type, Object
-        return Shape type
-
-      @_argumentTypes = argumentTypes
-
-      @_didBuild.push (type) ->
-        type.argumentTypes = argumentTypes
-        overrideObjectToString argumentTypes, gatherTypeNames
-
-      return if not isDev
-
-      if Array.isArray argumentTypes
-        keys = argumentTypes.map (_, index) -> "args[#{index}]"
-        typeList = argumentTypes
-
-      else
-        keys = Object.keys argumentTypes
-        typeList = sync.reduce argumentTypes, [], (values, value) ->
-          values.push value
-          return values
-
-      # Argument validation occurs after
-      # the arguments have been initialized!
-      @_willBuild.push -> @initArguments (args) ->
-        for type, index in typeList
-          assertType args[index], type, keys[index]
-        return args
-
-  argumentDefaults:
-    get: -> @_argumentDefaults
-    set: (argumentDefaults) ->
-
-      assert @_argumentTypes, "'argumentTypes' must be defined first!"
-      assert not @_argumentDefaults, "'argumentDefaults' is already defined!"
-
-      assertType argumentDefaults, [ Array, Object ]
-
-      @_argumentDefaults = argumentDefaults
-
-      @_didBuild.push (type) ->
-        type.argumentDefaults = argumentDefaults
-
-      if Array.isArray argumentDefaults
-        @_initArguments.unshift (args) ->
-          for value, index in argumentDefaults
-            continue if args[index] isnt undefined
-            if isConstructor value, Object
-              args[index] = combine args[index], value
-            else args[index] = value
-          return args
-        return
-
-      # Merging default argument values occurs
-      # after the arguments have been created,
-      # but before the arguments are validated!
-      argumentNames = Object.keys @_argumentTypes
-      @_initArguments.push (args) ->
-        for name, index in argumentNames
-          continue if args[index] isnt undefined
-          value = argumentDefaults[name]
-          if isConstructor value, Object
-            args[index] = combine args[index], value
-          else args[index] = value
-        return args
-      return
-
-  createArguments: (func) ->
-    assertType func, Function
-    @_initArguments.unshift func
-    return
-
-  initArguments: (func) ->
-    assertType func, Function
-    @_initArguments.push (args) ->
-      func.call null, args
-      return args
     return
 
   returnCached: (func) ->
     assertType func, Function
     @_getCacheID = func
-    @_didBuild.push (type) ->
+    @didBuild (type) ->
       type.cache = Object.create null
       return
     return
@@ -310,19 +178,17 @@ define TypeBuilder.prototype,
 
 define TypeBuilder.prototype,
 
-  __buildArgumentCreator: ->
+  __buildArgCreator: ->
 
-    phases = @_initArguments
+    phases = @_argPhases
 
     if phases.length is 0
       return emptyFunction.thatReturnsArgument
 
-    return (initialArgs) ->
-      args = [] # The 'initialArgs' should not be leaked.
-      args.push arg for arg in initialArgs
+    return (args) ->
+      args = sliceArray args
       for phase in phases
         args = phase.call null, args
-        assert Array.isArray(args), { args, phase, reason: "Must return an Array of arguments!" }
       return args
 
   __buildInstanceCreator: ->
@@ -346,6 +212,10 @@ define TypeBuilder.prototype,
         return createInstance type, args
 
     return createInstance
+
+#
+# Helpers
+#
 
 overrideObjectToString = (obj, transform) ->
   Object.defineProperty obj, "toString",

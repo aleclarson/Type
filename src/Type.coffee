@@ -2,65 +2,36 @@
 require "isDev"
 
 NamedFunction = require "NamedFunction"
-formatType = require "formatType"
-assertType = require "assertType"
-sliceArray = require "sliceArray"
 Validator = require "Validator"
-Property = require "Property"
 Builder = require "Builder"
 setKind = require "setKind"
 setType = require "setType"
 Tracer = require "tracer"
 define = require "define"
-Maybe = require "Maybe"
-Kind = require "Kind"
 
-TypeTuple = require "./TypeTuple"
+ValidationMixin = require "./ValidationMixin"
 
 Type = NamedFunction "Type", (name, func) ->
   self = Type.Builder name, func
   isDev and self._tracer = Tracer "Type()", skip: 1
-  self.didBuild (type) -> Type.augment type, yes
+  self.didBuild (type) -> setType type, Type
   return self
 
 module.exports = setKind Type, Function
 
-define Type::,
-
-  or: Validator::or = ->
-    types = sliceArray arguments
-    types.unshift this
-    return TypeTuple types
-
-  isRequired: get: ->
-    type: this
-    required: yes
-
-  withDefault: (value) ->
-    type: this
-    default: value
-
-define Type,
-
-  Builder: require "./TypeBuilder"
-
-  Tuple: TypeTuple
-
-  augment: (type, inheritable) ->
-
-    prop = Property { frozen: yes, enumerable: no }
-
-    prop.define type, "Maybe", { value: Maybe type }
-
-    if inheritable
-      prop.define type, "Kind", { value: Kind type }
-
-    return setType type, Type
+Type.Builder = require "./TypeBuilder"
 
 #
-# Builtin Types
+# Add validation helpers to the
+# prototypes of `Type` and `Validator`.
 #
+define Type::, ValidationMixin
+define Validator::, ValidationMixin
 
+#
+# Set the `__proto__` of each built-in type
+# to force inheritance of the `Type` class.
+#
 [ Array
   Boolean
   Date
@@ -68,14 +39,11 @@ define Type,
   RegExp
   String
   Symbol
-].forEach (type) ->
-  Type.augment type
-
-[ Object
+  Object
   Function
   Error
   Type
   Type.Builder
   Builder
-].forEach (type) ->
-  Type.augment type, yes
+  Validator
+  Validator.Type ].forEach (type) -> setType type, Type
