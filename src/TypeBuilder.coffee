@@ -178,40 +178,40 @@ define TypeBuilder.prototype,
 
 define TypeBuilder.prototype,
 
-  __buildArgCreator: ->
+  __createArgBuilder: ->
 
     phases = @_argPhases
 
     if phases.length is 0
       return emptyFunction.thatReturnsArgument
 
-    return (args) ->
+    return buildArgs = (args) ->
       args = sliceArray args
       for phase in phases
         args = phase.call null, args
       return args
 
-  __buildInstanceCreator: ->
+  __createInstanceBuilder: ->
 
-    createInstance = Builder::__buildInstanceCreator.call this
+    super_buildInstance = Builder::__createInstanceBuilder.call this
 
     getCacheID = @_getCacheID
     if getCacheID
-      return (type, args) ->
+      return buildInstance = (type, args) ->
         id = getCacheID.apply null, args
-        return createInstance type, args if id is undefined
+        return super_buildInstance type, args if id is undefined
         instance = type.cache[id]
         return instance if instance
-        return type.cache[id] = createInstance type, args
+        return type.cache[id] = super_buildInstance type, args
 
     getExisting = @_getExisting
     if getExisting
-      return (type, args) ->
+      return buildInstance = (type, args) ->
         instance = getExisting.apply null, args
         return instance if instance
-        return createInstance type, args
+        return super_buildInstance type, args
 
-    return createInstance
+    return super_buildInstance
 
 #
 # Helpers

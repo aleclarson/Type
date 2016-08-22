@@ -221,13 +221,13 @@ define(TypeBuilder.prototype, {
 });
 
 define(TypeBuilder.prototype, {
-  __buildArgCreator: function() {
-    var phases;
+  __createArgBuilder: function() {
+    var buildArgs, phases;
     phases = this._argPhases;
     if (phases.length === 0) {
       return emptyFunction.thatReturnsArgument;
     }
-    return function(args) {
+    return buildArgs = function(args) {
       var i, len, phase;
       args = sliceArray(args);
       for (i = 0, len = phases.length; i < len; i++) {
@@ -237,36 +237,36 @@ define(TypeBuilder.prototype, {
       return args;
     };
   },
-  __buildInstanceCreator: function() {
-    var createInstance, getCacheID, getExisting;
-    createInstance = Builder.prototype.__buildInstanceCreator.call(this);
+  __createInstanceBuilder: function() {
+    var buildInstance, getCacheID, getExisting, super_buildInstance;
+    super_buildInstance = Builder.prototype.__createInstanceBuilder.call(this);
     getCacheID = this._getCacheID;
     if (getCacheID) {
-      return function(type, args) {
+      return buildInstance = function(type, args) {
         var id, instance;
         id = getCacheID.apply(null, args);
         if (id === void 0) {
-          return createInstance(type, args);
+          return super_buildInstance(type, args);
         }
         instance = type.cache[id];
         if (instance) {
           return instance;
         }
-        return type.cache[id] = createInstance(type, args);
+        return type.cache[id] = super_buildInstance(type, args);
       };
     }
     getExisting = this._getExisting;
     if (getExisting) {
-      return function(type, args) {
+      return buildInstance = function(type, args) {
         var instance;
         instance = getExisting.apply(null, args);
         if (instance) {
           return instance;
         }
-        return createInstance(type, args);
+        return super_buildInstance(type, args);
       };
     }
-    return createInstance;
+    return super_buildInstance;
   }
 });
 
