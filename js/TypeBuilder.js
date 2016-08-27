@@ -143,9 +143,9 @@ define(TypeBuilder.prototype, {
     isDev && (replaceArgs = bind.toString(func, replaceArgs));
     this._argPhases.push(replaceArgs);
   },
-  defineOptions: function(options) {
+  defineOptions: function(optionConfigs) {
     var optionDefaults, optionNames, optionTypes, requiredTypes, validateOptions;
-    assertType(options, Object);
+    assertType(optionConfigs, Object);
     if (this._optionTypes) {
       throw Error("'defineOptions' must only be called once!");
     }
@@ -153,7 +153,7 @@ define(TypeBuilder.prototype, {
     optionTypes = {};
     optionDefaults = {};
     requiredTypes = {};
-    sync.each(options, function(option, name) {
+    sync.each(optionConfigs, function(option, name) {
       var optionType;
       optionNames.push(name);
       if (!isType(option, Object)) {
@@ -174,7 +174,7 @@ define(TypeBuilder.prototype, {
       }
     });
     validateOptions = function(args) {
-      var i, len, name, option, optionType;
+      var i, len, name, option, optionType, options;
       options = args[0];
       options || (args[0] = options = {});
       assertType(options, Object, "options");

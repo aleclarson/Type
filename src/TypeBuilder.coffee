@@ -112,8 +112,8 @@ define TypeBuilder.prototype,
     @_argPhases.push replaceArgs
     return
 
-  defineOptions: (options) ->
-    assertType options, Object
+  defineOptions: (optionConfigs) ->
+    assertType optionConfigs, Object
 
     if @_optionTypes
       throw Error "'defineOptions' must only be called once!"
@@ -123,7 +123,7 @@ define TypeBuilder.prototype,
     optionDefaults = {}
     requiredTypes = {}
 
-    sync.each options, (option, name) ->
+    sync.each optionConfigs, (option, name) ->
       optionNames.push name
       if not isType option, Object
         optionTypes[name] = option
