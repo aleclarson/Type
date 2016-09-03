@@ -1,12 +1,10 @@
-var Builder, NamedFunction, Tracer, Type, ValidationMixin, Validator, define, setKind, setType;
+var NamedFunction, Tracer, Type, ValidationMixin, Validator, define, setKind, setType;
 
 require("isDev");
 
 NamedFunction = require("NamedFunction");
 
 Validator = require("Validator");
-
-Builder = require("Builder");
 
 setKind = require("setKind");
 
@@ -38,8 +36,12 @@ define(Type.prototype, ValidationMixin);
 
 define(Validator.prototype, ValidationMixin);
 
-[Array, Boolean, Date, Number, RegExp, String, Symbol, Object, Function, Error, Type, Type.Builder, Builder, Validator, Validator.Type].forEach(function(type) {
+[Validator, Validator.Type].forEach(function(type) {
   return setType(type, Type);
+});
+
+[Array, Boolean, Number, RegExp, String, Symbol, Function, Object, Error, Date].forEach(function(type) {
+  return define(type, ValidationMixin);
 });
 
 //# sourceMappingURL=map/Type.map

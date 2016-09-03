@@ -3,7 +3,6 @@ require "isDev"
 
 NamedFunction = require "NamedFunction"
 Validator = require "Validator"
-Builder = require "Builder"
 setKind = require "setKind"
 setType = require "setType"
 Tracer = require "tracer"
@@ -21,29 +20,25 @@ module.exports = setKind Type, Function
 
 Type.Builder = require "./TypeBuilder"
 
-#
-# Add validation helpers to the
-# prototypes of `Type` and `Validator`.
-#
 define Type::, ValidationMixin
 define Validator::, ValidationMixin
 
-#
-# Set the `__proto__` of each built-in type
-# to force inheritance of the `Type` class.
-#
+[ Validator
+  Validator.Type
+]
+.forEach (type) ->
+  setType type, Type
+
 [ Array
   Boolean
-  Date
   Number
   RegExp
   String
   Symbol
-  Object
   Function
+  Object
   Error
-  Type
-  Type.Builder
-  Builder
-  Validator
-  Validator.Type ].forEach (type) -> setType type, Type
+  Date
+]
+.forEach (type) ->
+  define type, ValidationMixin

@@ -1,4 +1,6 @@
-var Builder, NamedFunction, Property, Shape, TypeBuilder, assertType, assertTypes, bind, combine, define, emptyFunction, gatherTypeNames, has, hasKeys, isConstructor, isType, mergeDefaults, overrideObjectToString, setKind, setType, sliceArray, sync;
+var Builder, NamedFunction, Shape, TypeBuilder, assertType, assertTypes, bind, combine, define, emptyFunction, frozen, gatherTypeNames, has, hasKeys, isConstructor, isType, mergeDefaults, overrideObjectToString, setKind, setType, sliceArray, sync;
+
+frozen = require("Property").frozen;
 
 NamedFunction = require("NamedFunction");
 
@@ -13,8 +15,6 @@ assertTypes = require("assertTypes");
 assertType = require("assertType");
 
 sliceArray = require("sliceArray");
-
-Property = require("Property");
 
 Builder = require("Builder");
 
@@ -38,25 +38,14 @@ bind = require("bind");
 
 has = require("has");
 
-TypeBuilder = NamedFunction("TypeBuilder", function(name, func) {
+TypeBuilder = NamedFunction("TypeBuilder", function(name) {
   var self;
-  self = Builder(name, func);
-  setType(self, TypeBuilder);
-  TypeBuilder.props.define(self, arguments);
-  return self;
+  self = Builder(name);
+  self._phases.args = [];
+  return setType(self, TypeBuilder);
 });
 
 module.exports = setKind(TypeBuilder, Builder);
-
-TypeBuilder.props = Property.Map({
-  _argPhases: function() {
-    return [];
-  },
-  _argTypes: null,
-  _optionTypes: null,
-  _getCacheID: null,
-  _getExisting: null
-});
 
 define(TypeBuilder.prototype, {
   defineArgs: function(args) {
@@ -108,8 +97,10 @@ define(TypeBuilder.prototype, {
       }
       return args;
     };
-    this._argTypes = argTypes;
-    this._argPhases.push(validateArgs);
+    frozen.define(this, "_argTypes", {
+      value: argTypes
+    });
+    this._phases.args.push(validateArgs);
     this.didBuild(function(type) {
       if (hasKeys(argTypes)) {
         type.argTypes = argTypes;
@@ -128,7 +119,7 @@ define(TypeBuilder.prototype, {
       return args;
     };
     isDev && (initArgs = bind.toString(func, initArgs));
-    this._argPhases.push(initArgs);
+    this._phases.args.push(initArgs);
   },
   replaceArgs: function(func) {
     var replaceArgs;
@@ -141,7 +132,7 @@ define(TypeBuilder.prototype, {
       throw TypeError("Must return an array-like object!");
     };
     isDev && (replaceArgs = bind.toString(func, replaceArgs));
-    this._argPhases.push(replaceArgs);
+    this._phases.args.push(replaceArgs);
   },
   defineOptions: function(optionConfigs) {
     var optionDefaults, optionNames, optionTypes, requiredTypes, validateOptions;
@@ -195,8 +186,10 @@ define(TypeBuilder.prototype, {
       }
       return args;
     };
-    this._optionTypes = optionTypes;
-    this._argPhases.push(validateOptions);
+    frozen.define(this, "_optionTypes", {
+      value: optionTypes
+    });
+    this._phases.args.push(validateOptions);
     this.didBuild(function(type) {
       if (hasKeys(optionTypes)) {
         type.optionTypes = optionTypes;
@@ -206,32 +199,21 @@ define(TypeBuilder.prototype, {
         return type.optionDefaults = optionDefaults;
       }
     });
-  },
-  returnCached: function(func) {
-    assertType(func, Function);
-    this._getCacheID = func;
-    this.didBuild(function(type) {
-      type.cache = Object.create(null);
-    });
-  },
-  returnExisting: function(func) {
-    assertType(func, Function);
-    this._getExisting = func;
   }
 });
 
 define(TypeBuilder.prototype, {
   __createArgBuilder: function() {
-    var buildArgs, phases;
-    phases = this._argPhases;
-    if (phases.length === 0) {
+    var argPhases, buildArgs;
+    argPhases = this._phases.args;
+    if (argPhases.length === 0) {
       return emptyFunction.thatReturnsArgument;
     }
     return buildArgs = function(args) {
       var i, len, phase;
       args = sliceArray(args);
-      for (i = 0, len = phases.length; i < len; i++) {
-        phase = phases[i];
+      for (i = 0, len = argPhases.length; i < len; i++) {
+        phase = argPhases[i];
         args = phase.call(null, args);
       }
       return args;
@@ -271,7 +253,7 @@ define(TypeBuilder.prototype, {
 });
 
 overrideObjectToString = function(obj, transform) {
-  return Object.defineProperty(obj, "toString", {
+  return define(obj, "toString", {
     value: function() {
       return log._format(transform(obj), {
         unlimited: true,

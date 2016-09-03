@@ -1,4 +1,6 @@
 
+{frozen} = require "Property"
+
 NamedFunction = require "NamedFunction"
 emptyFunction = require "emptyFunction"
 mergeDefaults = require "mergeDefaults"
@@ -6,7 +8,6 @@ isConstructor = require "isConstructor"
 assertTypes = require "assertTypes"
 assertType = require "assertType"
 sliceArray = require "sliceArray"
-Property = require "Property"
 Builder = require "Builder"
 setKind = require "setKind"
 setType = require "setType"
@@ -19,25 +20,12 @@ sync = require "sync"
 bind = require "bind"
 has = require "has"
 
-TypeBuilder = NamedFunction "TypeBuilder", (name, func) ->
-  self = Builder name, func
-  setType self, TypeBuilder
-  TypeBuilder.props.define self, arguments
-  return self
+TypeBuilder = NamedFunction "TypeBuilder", (name) ->
+  self = Builder name
+  self._phases.args = []
+  return setType self, TypeBuilder
 
 module.exports = setKind TypeBuilder, Builder
-
-TypeBuilder.props = Property.Map
-
-  _argPhases: -> []
-
-  _argTypes: null
-
-  _optionTypes: null
-
-  _getCacheID: null
-
-  _getExisting: null
 
 define TypeBuilder.prototype,
 
@@ -79,8 +67,8 @@ define TypeBuilder.prototype,
           argType and assertType arg, argType, "args[#{index}]"
       return args
 
-    @_argTypes = argTypes
-    @_argPhases.push validateArgs
+    frozen.define this, "_argTypes", {value: argTypes}
+    @_phases.args.push validateArgs
     @didBuild (type) ->
       if hasKeys argTypes
         type.argTypes = argTypes
@@ -97,7 +85,7 @@ define TypeBuilder.prototype,
       return args
 
     isDev and initArgs = bind.toString func, initArgs
-    @_argPhases.push initArgs
+    @_phases.args.push initArgs
     return
 
   replaceArgs: (func) ->
@@ -109,7 +97,7 @@ define TypeBuilder.prototype,
       throw TypeError "Must return an array-like object!"
 
     isDev and replaceArgs = bind.toString func, replaceArgs
-    @_argPhases.push replaceArgs
+    @_phases.args.push replaceArgs
     return
 
   defineOptions: (optionConfigs) ->
@@ -153,8 +141,10 @@ define TypeBuilder.prototype,
           optionType and assertType option, optionType, "options." + name
       return args
 
-    @_optionTypes = optionTypes
-    @_argPhases.push validateOptions
+    frozen.define this, "_optionTypes", {value: optionTypes}
+
+    @_phases.args.push validateOptions
+
     @didBuild (type) ->
       if hasKeys optionTypes
         type.optionTypes = optionTypes
@@ -163,31 +153,18 @@ define TypeBuilder.prototype,
         type.optionDefaults = optionDefaults
     return
 
-  returnCached: (func) ->
-    assertType func, Function
-    @_getCacheID = func
-    @didBuild (type) ->
-      type.cache = Object.create null
-      return
-    return
-
-  returnExisting: (func) ->
-    assertType func, Function
-    @_getExisting = func
-    return
-
 define TypeBuilder.prototype,
 
   __createArgBuilder: ->
 
-    phases = @_argPhases
+    argPhases = @_phases.args
 
-    if phases.length is 0
+    if argPhases.length is 0
       return emptyFunction.thatReturnsArgument
 
     return buildArgs = (args) ->
       args = sliceArray args
-      for phase in phases
+      for phase in argPhases
         args = phase.call null, args
       return args
 
@@ -218,8 +195,8 @@ define TypeBuilder.prototype,
 #
 
 overrideObjectToString = (obj, transform) ->
-  Object.defineProperty obj, "toString",
-    value: -> log._format transform(obj), { unlimited: yes, colors: no }
+  define obj, "toString", value: ->
+    log._format transform(obj), {unlimited: yes, colors: no}
 
 gatherTypeNames = (type) ->
 
