@@ -2,66 +2,43 @@
 require "isDev"
 
 NamedFunction = require "NamedFunction"
-assertType = require "assertType"
-Property = require "Property"
-Builder = require "Builder"
+Validator = require "Validator"
 setKind = require "setKind"
 setType = require "setType"
 Tracer = require "tracer"
 define = require "define"
-Maybe = require "Maybe"
-Kind = require "Kind"
+
+ValidationMixin = require "./ValidationMixin"
 
 Type = NamedFunction "Type", (name, func) ->
   self = Type.Builder name, func
   isDev and self._tracer = Tracer "Type()", skip: 1
-  self.didBuild (type) -> Type.augment type, yes
+  self.didBuild (type) -> setType type, Type
   return self
 
 module.exports = setKind Type, Function
 
-define Type.prototype,
+Type.Builder = require "./TypeBuilder"
 
-  isRequired: get: ->
-    { type: this, required: yes }
+define Type::, ValidationMixin
+define Validator::, ValidationMixin
 
-  withDefault: (value) ->
-    { type: this, default: value }
-
-define Type,
-
-  Builder: require "./TypeBuilder"
-
-  augment: (type, inheritable) ->
-
-    prop = Property { frozen: yes, enumerable: no }
-
-    prop.define type, "Maybe", { value: Maybe type }
-
-    if inheritable
-      prop.define type, "Kind", { value: Kind type }
-
-    return setType type, Type
-
-#
-# Builtin Types
-#
+[ Validator
+  Validator.Type
+]
+.forEach (type) ->
+  setType type, Type
 
 [ Array
   Boolean
-  Date
   Number
   RegExp
   String
   Symbol
-].forEach (type) ->
-  Type.augment type
-
-[ Object
   Function
+  Object
   Error
-  Type
-  Type.Builder
-  Builder
-].forEach (type) ->
-  Type.augment type, yes
+  Date
+]
+.forEach (type) ->
+  define type, ValidationMixin
