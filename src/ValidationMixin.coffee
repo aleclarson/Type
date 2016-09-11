@@ -1,7 +1,7 @@
 
 {frozen} = require "Property"
 
-sliceArray = require "sliceArray"
+cloneArgs = require "cloneArgs"
 Typle = require "Typle"
 Maybe = require "Maybe"
 Kind = require "Kind"
@@ -26,7 +26,7 @@ module.exports =
 
   # Pass values of many types.
   or: ->
-    types = sliceArray arguments
+    types = cloneArgs arguments
     types.unshift this
     return Typle types
 

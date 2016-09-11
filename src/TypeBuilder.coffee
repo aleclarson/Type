@@ -3,22 +3,16 @@
 
 NamedFunction = require "NamedFunction"
 emptyFunction = require "emptyFunction"
-mergeDefaults = require "mergeDefaults"
-isConstructor = require "isConstructor"
-assertTypes = require "assertTypes"
 assertType = require "assertType"
-sliceArray = require "sliceArray"
 Builder = require "Builder"
 setKind = require "setKind"
 setType = require "setType"
 hasKeys = require "hasKeys"
-combine = require "combine"
 isType = require "isType"
 define = require "define"
 Shape = require "Shape"
 sync = require "sync"
 bind = require "bind"
-has = require "has"
 
 TypeBuilder = NamedFunction "TypeBuilder", (name) ->
   self = Builder name
@@ -45,7 +39,7 @@ define TypeBuilder.prototype,
       if not isType arg, Object
         argTypes[name] = arg
         return
-      if has arg, "default"
+      if arg.default isnt undefined
         argDefaults[name] = arg.default
       if argType = arg.type
         if isType argType, Object
@@ -81,22 +75,23 @@ define TypeBuilder.prototype,
     assertType func, Function
 
     initArgs = (args) ->
-      func.call null, args
+      func.call this, args
       return args
 
     isDev and initArgs = bind.toString func, initArgs
     @_phases.args.push initArgs
     return
 
-  replaceArgs: (func) ->
-    assertType func, Function
+  replaceArgs: (replaceArgs) ->
+    assertType replaceArgs, Function
 
-    replaceArgs = (args) ->
-      args = func.call null, args
-      return args if args and args.length
-      throw TypeError "Must return an array-like object!"
+    if isDev
+      @_phases.args.push bind.toString replaceArgs, (args) ->
+        args = replaceArgs.call this, args
+        return args if args and typeof args.length is "number"
+        throw TypeError "Must return an array-like object!"
+      return
 
-    isDev and replaceArgs = bind.toString func, replaceArgs
     @_phases.args.push replaceArgs
     return
 
@@ -116,7 +111,7 @@ define TypeBuilder.prototype,
       if not isType option, Object
         optionTypes[name] = option
         return
-      if has option, "default"
+      if option.default isnt undefined
         optionDefaults[name] = option.default
       if optionType = option.type
         if isType optionType, Object
@@ -162,33 +157,17 @@ define TypeBuilder.prototype,
     if argPhases.length is 0
       return emptyFunction.thatReturnsArgument
 
-    return buildArgs = (args) ->
-      args = sliceArray args
+    return buildArgs = (context, initialArgs) ->
+
+      args = new Array initialArgs.length
+
+      for arg, i in initialArgs
+        args[i] = arg
+
       for phase in argPhases
-        args = phase.call null, args
+        args = phase.call context, args
+
       return args
-
-  __createInstanceBuilder: ->
-
-    super_buildInstance = Builder::__createInstanceBuilder.call this
-
-    getCacheID = @_getCacheID
-    if getCacheID
-      return buildInstance = (type, args) ->
-        id = getCacheID.apply null, args
-        return super_buildInstance type, args if id is undefined
-        instance = type.cache[id]
-        return instance if instance
-        return type.cache[id] = super_buildInstance type, args
-
-    getExisting = @_getExisting
-    if getExisting
-      return buildInstance = (type, args) ->
-        instance = getExisting.apply null, args
-        return instance if instance
-        return super_buildInstance type, args
-
-    return super_buildInstance
 
 #
 # Helpers
