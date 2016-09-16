@@ -1,5 +1,5 @@
 
-{frozen} = require "Property"
+{mutable} = require "Property"
 
 cloneArgs = require "cloneArgs"
 Typle = require "Typle"
@@ -33,11 +33,11 @@ module.exports =
   # Pass undefined values.
   Maybe: get: ->
     value = Maybe this
-    frozen.define this, "Maybe", {value}
+    mutable.define this, "Maybe", get: -> value
     return value
 
   # Pass values that inherit the expected type.
   Kind: get: ->
     value = Kind this
-    frozen.define this, "Kind", {value}
+    mutable.define this, "Kind", get: -> value
     return value
