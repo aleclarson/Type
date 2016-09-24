@@ -11,6 +11,7 @@ hasKeys = require "hasKeys"
 isType = require "isType"
 define = require "define"
 Shape = require "Shape"
+isDev = require "isDev"
 sync = require "sync"
 bind = require "bind"
 

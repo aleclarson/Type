@@ -1,12 +1,11 @@
 
-require "isDev"
-
 NamedFunction = require "NamedFunction"
 Validator = require "Validator"
 setKind = require "setKind"
 setType = require "setType"
 Tracer = require "tracer"
 define = require "define"
+isDev = require "isDev"
 
 ValidationMixin = require "./ValidationMixin"
 
