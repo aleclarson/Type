@@ -158,7 +158,7 @@ define TypeBuilder.prototype,
     if argPhases.length is 0
       return emptyFunction.thatReturnsArgument
 
-    return buildArgs = (context, initialArgs) ->
+    return buildArgs = (initialArgs, context) ->
 
       args = new Array initialArgs.length
 
