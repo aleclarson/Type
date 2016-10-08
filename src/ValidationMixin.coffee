@@ -33,11 +33,15 @@ module.exports =
   # Pass undefined values.
   Maybe: get: ->
     value = Maybe this
-    mutable.define this, "Maybe", get: -> value
+    mutable.define this, "Maybe",
+      get: -> value
+      enumerable: no
     return value
 
   # Pass values that inherit the expected type.
   Kind: get: ->
     value = Kind this
-    mutable.define this, "Kind", get: -> value
+    mutable.define this, "Kind",
+      get: -> value
+      enumerable: no
     return value
