@@ -3,6 +3,7 @@ NamedFunction = require "NamedFunction"
 Validator = require "Validator"
 Property = require "Property"
 setKind = require "setKind"
+Builder = require "Builder"
 setType = require "setType"
 Tracer = require "tracer"
 isType = require "isType"
@@ -17,6 +18,8 @@ Type = NamedFunction "Type", (name, func) ->
   return self
 
 module.exports = setKind Type, Function
+
+Type.Mixin = Builder.Mixin
 
 Type.Builder = require "./TypeBuilder"
 
