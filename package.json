@@ -10,7 +10,7 @@
     "postinstall": "npm run build"
   },
   "dependencies": {
-    "Builder": "aleclarson/Builder#2.1.0",
+    "Builder": "aleclarson/Builder#2.2.2",
     "Kind": "aleclarson/Kind#1.0.1",
     "Maybe": "aleclarson/Maybe#1.0.2",
     "NamedFunction": "aleclarson/NamedFunction#2.0.1",
