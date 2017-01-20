@@ -1,0 +1,28 @@
+{
+  "name": "Type",
+  "version": "2.1.0",
+  "main": "js/Type",
+  "dependencies": {
+    "Builder": "aleclarson/Builder#2.1.0",
+    "Kind": "aleclarson/Kind#1.0.1",
+    "Maybe": "aleclarson/Maybe#1.0.2",
+    "NamedFunction": "aleclarson/NamedFunction#2.0.1",
+    "OneOf": "aleclarson/OneOf#1.0.1",
+    "Property": "aleclarson/Property#1.2.1",
+    "Shape": "aleclarson/Shape#2.0.1",
+    "Typle": "aleclarson/Typle#1.0.1",
+    "Validator": "aleclarson/Validator#1.1.1",
+    "assertType": "aleclarson/assertType#2.0.1",
+    "bind": "aleclarson/bind#1.0.1",
+    "cloneArgs": "aleclarson/cloneArgs#1.0.0",
+    "define": "aleclarson/define#1.0.1",
+    "emptyFunction": "aleclarson/emptyFunction#1.0.0",
+    "hasKeys": "aleclarson/hasKeys#1.0.0",
+    "isDev": "aleclarson/isDev#2.0.0",
+    "isType": "aleclarson/isType#1.0.1",
+    "setKind": "aleclarson/setKind#1.0.0",
+    "setType": "aleclarson/setType#1.0.0",
+    "sync": "aleclarson/sync#1.0.1",
+    "tracer": "aleclarson/tracer#1.0.0"
+  }
+}
