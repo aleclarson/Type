@@ -21,11 +21,6 @@ TypeBuilder = NamedFunction "TypeBuilder", (name) ->
 
 module.exports = setKind TypeBuilder, Builder
 
-define TypeBuilder,
-
-  _stringifyTypes: (types) ->
-    JSON.stringify types
-
 define TypeBuilder.prototype,
 
   defineArgs: (config) ->
