@@ -1,8 +1,7 @@
 
 {mutable} = require "Property"
 
-cloneArgs = require "cloneArgs"
-Typle = require "Typle"
+Either = require "Either"
 Maybe = require "Maybe"
 Kind = require "Kind"
 
@@ -24,11 +23,12 @@ module.exports =
     type: this
     default: value
 
-  # Pass values of many types.
+  # Allow values of a variety of types.
   or: ->
-    types = cloneArgs arguments
-    types.unshift this
-    return Typle types
+    value = Either this
+    for arg in arguments
+      value.types.push arg
+    return value
 
   # Pass undefined values.
   Maybe: get: ->
