@@ -23,6 +23,10 @@ module.exports = setKind TypeBuilder, Builder
 
 define TypeBuilder.prototype,
 
+  createArgs: (create) ->
+    @_phases.args.push create
+    return
+
   defineArgs: (config) ->
 
     throw Error "Cannot call 'defineArgs' more than once!" if @_args
