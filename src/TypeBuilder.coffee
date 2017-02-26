@@ -31,17 +31,12 @@ define TypeBuilder.prototype,
 
     throw Error "Cannot call 'defineArgs' more than once!" if @_args
 
-    assertType config, Either(Object, Function)
-
-    types =
-      if isType config, Function
-      then null
-      else config
+    assertType config, Either(Function, Object, Array)
 
     args =
-      if types
-      then Arguments types
-      else createArguments config()
+      if isType config, Function
+      then createArguments config()
+      else Arguments config
 
     frozen.define this, "_args", {value: args}
 
