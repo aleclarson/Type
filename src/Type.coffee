@@ -1,5 +1,6 @@
 
 NamedFunction = require "NamedFunction"
+assertType = require "assertType"
 Validator = require "Validator"
 Property = require "Property"
 setKind = require "setKind"
@@ -22,6 +23,14 @@ module.exports = setKind Type, Function
 Type.Mixin = Builder.Mixin
 
 Type.Builder = require "./TypeBuilder"
+
+{prototype} = Type.Builder
+Type.extend = (key, method) ->
+  assertType key, String
+  assertType method, Function
+  throw Error "'#{key}' already exists" if prototype[key]
+  prototype[key] = method
+  return
 
 # On each target, define the following validation helpers:
 #   - isRequired      equal to {type: Number, required: true}
