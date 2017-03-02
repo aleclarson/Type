@@ -28,6 +28,7 @@ Type.Builder = require "./TypeBuilder"
 Type.extend = (key, method) ->
   assertType key, String
   assertType method, Function
+  throw Error "'#{key}' already exists" if prototype[key]
   prototype[key] = method
   return
 
