@@ -4,6 +4,7 @@
 NamedFunction = require "NamedFunction"
 emptyFunction = require "emptyFunction"
 assertType = require "assertType"
+sliceArray = require "sliceArray"
 Arguments = require "Arguments"
 Builder = require "Builder"
 setKind = require "setKind"
@@ -12,19 +13,17 @@ Either = require "Either"
 isType = require "isType"
 define = require "define"
 isDev = require "isDev"
-sync = require "sync"
 
 TypeBuilder = NamedFunction "TypeBuilder", (name) ->
   self = Builder name
-  self._phases.args = []
   return setType self, TypeBuilder
 
 module.exports = setKind TypeBuilder, Builder
 
 define TypeBuilder.prototype,
 
-  createArgs: (create) ->
-    @_phases.args.push create
+  createArgs: (callback) ->
+    @_phases.push "args", callback
     return
 
   defineArgs: (config) ->
@@ -44,7 +43,7 @@ define TypeBuilder.prototype,
       @defineStatics
         optionTypes: {value: args.types}
 
-    @_phases.args.push (values) ->
+    @_phases.push "args", (values) ->
       values = args.initialize values
       if isDev
         error = args.validate values
@@ -57,21 +56,14 @@ define TypeBuilder.prototype,
 
   __createArgBuilder: ->
 
-    argPhases = @_phases.args
-
-    if argPhases.length is 0
+    unless @_phases.has "args"
       return emptyFunction.thatReturnsArgument
 
-    return buildArgs = (initialArgs, context) ->
-
-      args = new Array initialArgs.length
-
-      for arg, i in initialArgs
-        args[i] = arg
-
-      for phase in argPhases
-        args = phase.call context, args
-
+    callbacks = @_phases.get "args"
+    return buildArgs = (args, context) ->
+      args = sliceArray args
+      for callback in callbacks
+        args = callback.call context, args
       return args
 
 #
@@ -81,6 +73,13 @@ define TypeBuilder.prototype,
 createArguments = (config) ->
   assertType config, Object
   args = Arguments.Builder()
+
+  config.types ?=
+    if isType config.defaults, Object
+    then {}
+    else []
+
   for key, value of config
     value? and args.set key, value
+
   return args.build()
