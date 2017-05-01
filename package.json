@@ -1,7 +1,7 @@
 {
   "name": "Type",
-  "version": "2.3.1",
-  "main": "js/Type",
+  "version": "2.4.0",
+  "main": "js/index",
   "plugins": [
     "lotus-coffee"
   ],
@@ -10,23 +10,23 @@
     "postinstall": "npm run build"
   },
   "dependencies": {
-    "Arguments": "aleclarson/Arguments#1.1.0",
-    "Builder": "aleclarson/Builder#2.2.3",
-    "Either": "aleclarson/Either#1.0.0",
-    "Kind": "aleclarson/Kind#1.0.1",
-    "Maybe": "aleclarson/Maybe#1.1.0",
+    "Arguments": "aleclarson/Arguments#1.1.2",
+    "Builder": "aleclarson/Builder#2.3.0",
+    "Either": "aleclarson/Either#1.0.2",
+    "Kind": "aleclarson/Kind#1.0.2",
+    "Maybe": "aleclarson/Maybe#1.1.1",
     "NamedFunction": "aleclarson/NamedFunction#2.0.1",
-    "OneOf": "aleclarson/OneOf#1.0.1",
-    "Property": "aleclarson/Property#1.2.3",
-    "Validator": "aleclarson/Validator#1.1.1",
-    "assertType": "aleclarson/assertType#2.0.1",
-    "define": "aleclarson/define#1.0.1",
+    "OneOf": "aleclarson/OneOf#1.1.0",
+    "Property": "aleclarson/Property#1.2.4",
+    "Validator": "aleclarson/Validator#1.2.0",
+    "assertType": "aleclarson/assertType#2.0.2",
+    "define": "aleclarson/define#1.0.2",
     "emptyFunction": "aleclarson/emptyFunction#1.0.0",
     "isDev": "aleclarson/isDev#2.0.0",
-    "isType": "aleclarson/isType#1.0.1",
+    "isType": "aleclarson/isType#1.0.2",
     "setKind": "aleclarson/setKind#1.0.0",
     "setType": "aleclarson/setType#1.0.0",
-    "sync": "aleclarson/sync#1.0.2",
-    "tracer": "aleclarson/tracer#1.0.0"
+    "sliceArray": "aleclarson/sliceArray#1.0.0",
+    "sync": "aleclarson/sync#1.0.3"
   }
 }
