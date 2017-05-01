@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "Arguments": "aleclarson/Arguments#1.1.0",
-    "Builder": "aleclarson/Builder#2.2.3",
+    "Builder": "aleclarson/Builder#2.3.0",
     "Either": "aleclarson/Either#1.0.0",
     "Kind": "aleclarson/Kind#1.0.1",
     "Maybe": "aleclarson/Maybe#1.1.0",
